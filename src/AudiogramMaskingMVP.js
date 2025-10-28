@@ -267,9 +267,11 @@ export default function AudiogramMaskingMVP() {
     lastSessionDate: null
   });
 
-  // Loading states
-  const [isLoading, setIsLoading] = useState(false);
-  const [toastMsg, setToastMsg] = useState('');
+  // Loading states（ボタン別に分離）
+  const [isLoadingPreset, setIsLoadingPreset] = useState(false);
+  const [isLoadingRandom, setIsLoadingRandom] = useState(false);
+  const [presetToast, setPresetToast] = useState('');
+  const [randomToast, setRandomToast] = useState('');
   
   // IC settings (周波数ごとの両耳間移行減衰量)
   const [icSettings, setIcSettings] = useState(
@@ -1546,41 +1548,29 @@ ${targets.map((target, index) => {
             </select>
             <button 
               className={`px-3 py-2 rounded-xl text-white text-sm flex items-center gap-2 ${
-                isLoading ? 'bg-teal-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700'
+                isLoadingPreset ? 'bg-teal-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700'
               }`} 
               onClick={async ()=>{
-                if (isLoading) return;
-                
-                setIsLoading(true);
-                
-                // ローディングアニメーション（1秒）
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
+                if (isLoadingPreset) return;
+                setIsLoadingPreset(true);
+                setPresetToast(`症例${selectedPreset}を読み込み中…`);
+                await new Promise(resolve => setTimeout(resolve, 400));
                 const p = selectedPreset==='A' ? PRESET_A : selectedPreset==='B' ? PRESET_B : selectedPreset==='C' ? PRESET_C : selectedPreset==='D' ? PRESET_D : selectedPreset==='E' ? PRESET_E : selectedPreset==='F' ? PRESET_F : selectedPreset==='G' ? PRESET_G : PRESET_H;
                 setPoints([]);
                 setTargets(buildTargetsFromPreset(p));
-                
-                // 初期設定に戻す
                 setEar('R');
                 setTrans('AC');
                 setLevel(0);
                 setMaskLevel(-15);
                 setFreq(1000);
-                
-                // 学習進捗の更新
-                setLearningProgress(prev => ({
-                  ...prev,
-                  totalSessions: prev.totalSessions + 1
-                }));
-                
-                setIsLoading(false);
-                
-                // 成功メッセージ
-                alert(`症例${selectedPreset}をロードしました！`);
+                setLearningProgress(prev => ({ ...prev, totalSessions: prev.totalSessions + 1 }));
+                setIsLoadingPreset(false);
+                setPresetToast(`症例${selectedPreset}をロードしました`);
+                setTimeout(()=> setPresetToast(''), 1200);
               }}
-              disabled={isLoading}
+              disabled={isLoadingPreset}
             >
-              {isLoading ? (
+              {isLoadingPreset ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                   ロード中...
@@ -1599,23 +1589,21 @@ ${targets.map((target, index) => {
             <span className="text-sm text-gray-600">自動症例作成</span>
             <button 
               className={`px-3 py-2 rounded-xl text-white text-sm flex items-center gap-2 transition-colors ${
-                isLoading ? 'bg-green-400 opacity-70 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
+                isLoadingRandom ? 'bg-green-400 opacity-70 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
               }`}
-              onClick={()=>{
-                if (isLoading) return;
-                setIsLoading(true);
-                setToastMsg('ランダム症例を生成中…');
-                // 直ちに生成・適用
+              onClick={async ()=>{
+                if (isLoadingRandom) return;
+                setIsLoadingRandom(true);
+                setRandomToast('ランダム症例を生成中…');
+                await new Promise(r=>setTimeout(r, 350));
                 generateRandomCase();
-                // 完了表示
-                setToastMsg('ランダム症例をロードしました');
-                setTimeout(() => setToastMsg(''), 1500);
-                // 少し遅らせてローディング解除（視覚的応答）
-                setTimeout(() => setIsLoading(false), 500);
+                setRandomToast('ランダム症例をロードしました');
+                setTimeout(() => setRandomToast(''), 1500);
+                setTimeout(() => setIsLoadingRandom(false), 450);
               }}
-              disabled={isLoading}
+              disabled={isLoadingRandom}
             >
-              {isLoading ? (
+              {isLoadingRandom ? (
                 <>
                   <div className="animate-spin h-4 w-4 rounded-full border-2 border-white border-t-transparent"></div>
                   ロード中...
@@ -2127,6 +2115,21 @@ ${targets.map((target, index) => {
             </div>
           </div>
         </div>
+        {/* Toasts */}
+        {(presetToast || randomToast) && (
+          <div className="fixed right-4 bottom-4 z-50 space-y-2">
+            {presetToast && (
+              <div className="px-4 py-2 rounded-lg shadow bg-teal-600 text-white text-sm">
+                {presetToast}
+              </div>
+            )}
+            {randomToast && (
+              <div className="px-4 py-2 rounded-lg shadow bg-green-600 text-white text-sm">
+                {randomToast}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
