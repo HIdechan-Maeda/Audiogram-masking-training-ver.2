@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
+import { supabase } from './supabaseClient';
 import { ResponsiveContainer, ComposedChart, XAxis, YAxis, CartesianGrid, Scatter, Line } from "recharts";
 
 // Audiogram-first Masking Trainer (MVP v2.4.9)
@@ -268,6 +269,7 @@ export default function AudiogramMaskingMVP() {
 
   // Loading states
   const [isLoading, setIsLoading] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
   
   // IC settings (周波数ごとの両耳間移行減衰量)
   const [icSettings, setIcSettings] = useState(
@@ -286,6 +288,72 @@ export default function AudiogramMaskingMVP() {
     maxStreak: 0,
     caseHistory: [] // [{caseId, correct, timestamp}]
   });
+
+  // Supabase Anonymous Auth
+  const [userId, setUserId] = useState(null);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        // すでにサインイン済みか確認
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.user?.id) {
+          if (mounted) setUserId(sessionData.session.user.id);
+        } else {
+          const { data, error } = await supabase.auth.signInAnonymously();
+          if (!error && data?.user?.id && mounted) setUserId(data.user.id);
+        }
+      } catch {}
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // DB保存
+  async function saveMeasurementToDB(entry) {
+    try {
+      if (!userId) return;
+      const payload = {
+        user_id: userId,
+        ear: entry.ear,
+        transducer: entry.transducer,
+        freq: entry.freq,
+        db: entry.dB,
+        masked: entry.masked,
+        mask_level: entry.masked ? entry.maskLevel : null,
+        so: entry.so || false,
+        case_id: entry.caseId || selectedPreset,
+        session_id: `${selectedPreset}-${new Date().toISOString().slice(0,10)}`
+      };
+      await supabase.from('measurements').insert(payload);
+    } catch {}
+  }
+
+  // 履歴読込
+  async function loadMeasurementsFromDB() {
+    try {
+      if (!userId) return;
+      const { data, error } = await supabase
+        .from('measurements')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(300);
+      if (error) return;
+      const logs = (data || []).map((row, idx) => ({
+        id: row.id || idx,
+        timestamp: new Date(row.created_at).toLocaleTimeString(),
+        ear: row.ear,
+        transducer: row.transducer,
+        freq: row.freq,
+        dB: row.db,
+        masked: row.masked,
+        maskLevel: row.mask_level ?? -15,
+        so: row.so,
+        caseId: row.case_id
+      }));
+      setMeasurementLog(logs);
+    } catch {}
+  }
 
   // Generate random audiogram case
   const generateRandomCase = () => {
@@ -716,6 +784,8 @@ export default function AudiogramMaskingMVP() {
         caseId: selectedPreset
       };
       setMeasurementLog(prev => [...prev, logEntry]);
+      // DBへ保存（匿名ユーザー単位）
+      saveMeasurementToDB(logEntry);
       
       // Update learning progress
       setLearningProgress(prev => ({
@@ -1528,10 +1598,31 @@ ${targets.map((target, index) => {
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-gray-600">自動症例作成</span>
             <button 
-              className="px-3 py-2 rounded-xl bg-green-600 text-white text-sm"
-              onClick={generateRandomCase}
+              className={`px-3 py-2 rounded-xl text-white text-sm flex items-center gap-2 transition-colors ${
+                isLoading ? 'bg-green-400 opacity-70 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
+              }`}
+              onClick={()=>{
+                if (isLoading) return;
+                setIsLoading(true);
+                setToastMsg('ランダム症例を生成中…');
+                // 直ちに生成・適用
+                generateRandomCase();
+                // 完了表示
+                setToastMsg('ランダム症例をロードしました');
+                setTimeout(() => setToastMsg(''), 1500);
+                // 少し遅らせてローディング解除（視覚的応答）
+                setTimeout(() => setIsLoading(false), 500);
+              }}
+              disabled={isLoading}
             >
-              ランダム症例生成
+              {isLoading ? (
+                <>
+                  <div className="animate-spin h-4 w-4 rounded-full border-2 border-white border-t-transparent"></div>
+                  ロード中...
+                </>
+              ) : (
+                'ランダム症例生成'
+              )}
             </button>
             <span className="text-xs text-gray-400">※ ランダムに症例パターンを生成（正常・感音性・伝音性・混合性難聴）</span>
           </div>
@@ -1736,6 +1827,12 @@ ${targets.map((target, index) => {
                 className="px-3 py-1 rounded-lg border text-sm bg-gray-100 hover:bg-gray-200"
               >
                 ログクリア
+              </button>
+              <button 
+                onClick={loadMeasurementsFromDB}
+                className="px-3 py-1 rounded-lg border text-sm bg-gray-100 hover:bg-gray-200"
+              >
+                履歴読込
               </button>
               <button 
                 onClick={() => exportToCSV()} 
