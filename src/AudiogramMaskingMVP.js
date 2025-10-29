@@ -168,11 +168,11 @@ const PRESET_DETAILS = {
     findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域）両耳REFER'
   },
   F: {
-    age: '30歳',
-    gender: '男性',
-    chiefComplaint: '高音域が聞こえにくい',
-    history: '特定の職業的曝露歴、両耳に同様のパターン',
-    findings: '両耳とも高音域で徐々に低下、2000Hzから症状が強まる'
+    age: '70歳',
+    gender: '女性',
+    chiefComplaint: 'TVの音が聞こえにくい',
+    history: 'ご主人から聞こえの悪さを指摘される。TVの音が大きいと言われる。そう言われたらそうかなと。ご主人が補聴器を勧めてきたので、仕方なく受診した',
+    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域）両耳REFER'
   },
   G: {
     age: '42歳',
