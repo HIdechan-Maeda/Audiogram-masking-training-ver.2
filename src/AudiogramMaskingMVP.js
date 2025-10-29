@@ -175,11 +175,11 @@ const PRESET_DETAILS = {
     findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域）両耳REFER'
   },
   G: {
-    age: '42歳',
+    age: '12歳',
     gender: '女性',
-    chiefComplaint: '耳の詰まり感、聞こえが悪い',
-    history: '慢性中耳炎の治療歴あり、定期的な経過観察中',
-    findings: '右耳は伝音難聴が顕著、左耳は混合性難聴パターン'
+    chiefComplaint: '鼻水が出る。聞こえの悪さ',
+    history: '小さい頃から滲出性中耳炎を繰り返す',
+    findings: '鼓膜所見：色が悪い・陥没あり、ティンパノB型'
   },
   H: {
     age: '60歳',
