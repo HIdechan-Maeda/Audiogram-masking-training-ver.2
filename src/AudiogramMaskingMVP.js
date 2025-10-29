@@ -1328,7 +1328,7 @@ export default function AudiogramMaskingMVP() {
     const accuracy = checkAccuracy();
     const caseId = selectedPreset;
     
-    // ランダム症例の場合は成績追跡を更新
+    // ランダム症例の場合は成績追跡を更新（ただし学習進捗には含めない）
     if (caseId === 'Custom') {
       const isPerfect = accuracy.allCorrect;
       setRandomCasePerformance(prev => {
@@ -1351,9 +1351,11 @@ export default function AudiogramMaskingMVP() {
           ]
         };
       });
+      alert(`ランダム症例のセッションが完了しました！\n精度: ${accuracy.accuracy}% (${accuracy.correct}/${accuracy.total})\n（この成績は自動生成問題の進捗に記録されます）`);
+      return;
     }
     
-    // 症例別の精度を更新
+    // プリセット症例のみ学習進捗に追加
     setLearningProgress(prev => ({
       ...prev,
       caseAccuracy: {
@@ -1365,7 +1367,7 @@ export default function AudiogramMaskingMVP() {
           completedAt: new Date().toISOString()
         }
       },
-      completedCases: [...prev.completedCases, caseId]
+      completedCases: prev.completedCases.includes(caseId) ? prev.completedCases : [...prev.completedCases, caseId]
     }));
     
     // 詳細な結果を表示
@@ -1397,7 +1399,7 @@ ${targets.map((target, index) => {
 
   // Reset progress function
   function resetProgress() {
-    if (window.confirm('学習進捗をリセットしますか？この操作は取り消せません。')) {
+    if (window.confirm('学習進捗と自動生成問題の進捗をリセットしますか？この操作は取り消せません。')) {
       setLearningProgress({
         totalSessions: 0,
         completedCases: [],
