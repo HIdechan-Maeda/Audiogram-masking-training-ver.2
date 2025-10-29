@@ -130,6 +130,66 @@ const PRESET_H = preset('症例H', [
   mk('L','BC', [[250,10],[500,15],[1000,20],[2000,25],[4000,20]])
 ]);
 
+// 症例の詳細情報
+const PRESET_DETAILS = {
+  A: {
+    age: '12歳',
+    gender: '男子',
+    chiefComplaint: '学校検診で聞こえの悪さを指摘された',
+    history: '本人から話を聞くと周囲がうるさくて、検査音が聞こえなかった様子。念の為受信した',
+    findings: '鼓膜所見正常、ティンパノA型、DPOAEは両耳PASSである'
+  },
+  B: {
+    age: '45歳',
+    gender: '男性',
+    chiefComplaint: '徐々に聞こえが悪くなってきた',
+    history: '右耳の聴力低下が顕著。過去に大きな音を聞いた経験あり',
+    findings: '右耳は高音域から徐々に低下、左耳はほぼ正常範囲'
+  },
+  C: {
+    age: '68歳',
+    gender: '女性',
+    chiefComplaint: '左耳が全く聞こえない',
+    history: '突然発症した高度難聴、メニエール病の既往歴あり',
+    findings: '左耳は全周波数でScale-Out判定、右耳は軽度の高音域低下'
+  },
+  D: {
+    age: '38歳',
+    gender: '男性',
+    chiefComplaint: '高音域が聞こえにくい',
+    history: '職場の騒音環境で長年勤務、耳鳴りあり',
+    findings: '両耳とも高音域（4000Hz以上）で聴力低下、低音域は正常範囲'
+  },
+  E: {
+    age: '55歳',
+    gender: '女性',
+    chiefComplaint: '複合的な難聴の症状',
+    history: '中耳炎の既往歴があり、加齢による変化も認められる',
+    findings: '右耳は伝音成分、左耳は感音成分が優勢'
+  },
+  F: {
+    age: '30歳',
+    gender: '男性',
+    chiefComplaint: '高音域が聞こえにくい',
+    history: '特定の職業的曝露歴、両耳に同様のパターン',
+    findings: '両耳とも高音域で徐々に低下、2000Hzから症状が強まる'
+  },
+  G: {
+    age: '42歳',
+    gender: '女性',
+    chiefComplaint: '耳の詰まり感、聞こえが悪い',
+    history: '慢性中耳炎の治療歴あり、定期的な経過観察中',
+    findings: '右耳は伝音難聴が顕著、左耳は混合性難聴パターン'
+  },
+  H: {
+    age: '60歳',
+    gender: '男性',
+    chiefComplaint: '平坦な難聴パターン',
+    history: '比較的均一な聴力低下、遺伝的要因の可能性',
+    findings: '両耳とも比較的平坦な難聴パターン、骨導値も低下'
+  }
+};
+
 function buildTargetsFromPreset(preset){
   return preset.targets.map(t => ({...t}));
 }
@@ -292,6 +352,10 @@ export default function AudiogramMaskingMVP() {
   const [isLoadingRandom, setIsLoadingRandom] = useState(false);
   const [presetToast, setPresetToast] = useState('');
   const [randomToast, setRandomToast] = useState('');
+  
+  // 症例情報モーダル
+  const [showCaseInfoModal, setShowCaseInfoModal] = useState(false);
+  const [currentCaseInfo, setCurrentCaseInfo] = useState(null);
   
   // IC settings (周波数ごとの両耳間移行減衰量)
   const [icSettings, setIcSettings] = useState(
@@ -1574,6 +1638,54 @@ ${targets.map((target, index) => {
           </div>
         )}
 
+        {/* 症例情報モーダル */}
+        {showCaseInfoModal && currentCaseInfo && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold text-blue-800">症例{currentCaseInfo.caseId}の情報</h3>
+                <button
+                  onClick={() => setShowCaseInfoModal(false)}
+                  className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
+                >
+                  閉じる
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {/* 基本情報 */}
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <h4 className="text-sm font-semibold text-blue-800 mb-2">基本情報</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">年齢・性別:</span>
+                      <span>{currentCaseInfo.age} {currentCaseInfo.gender}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 主訴 */}
+                <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                  <h4 className="text-sm font-semibold text-orange-800 mb-2">主訴</h4>
+                  <p className="text-sm text-gray-700">{currentCaseInfo.chiefComplaint}</p>
+                </div>
+
+                {/* 既往歴 */}
+                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                  <h4 className="text-sm font-semibold text-green-800 mb-2">現病歴</h4>
+                  <p className="text-sm text-gray-700">{currentCaseInfo.history}</p>
+                </div>
+
+                {/* 所見 */}
+                <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                  <h4 className="text-sm font-semibold text-purple-800 mb-2">診察所見</h4>
+                  <p className="text-sm text-gray-700">{currentCaseInfo.findings}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Preset loader (secret) */}
         <div className="bg-white rounded-2xl shadow p-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -1609,6 +1721,13 @@ ${targets.map((target, index) => {
                 setIsLoadingPreset(false);
                 setPresetToast(`症例${selectedPreset}をロードしました`);
                 setTimeout(()=> setPresetToast(''), 1200);
+                
+                // 症例情報を表示
+                const caseDetails = PRESET_DETAILS[selectedPreset];
+                if (caseDetails) {
+                  setCurrentCaseInfo({ caseId: selectedPreset, ...caseDetails });
+                  setShowCaseInfoModal(true);
+                }
               }}
               disabled={isLoadingPreset}
             >
