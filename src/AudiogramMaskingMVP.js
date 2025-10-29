@@ -142,9 +142,9 @@ const PRESET_DETAILS = {
   B: {
     age: '45歳',
     gender: '男性',
-    chiefComplaint: '徐々に聞こえが悪くなってきた',
-    history: '右耳の聴力低下が顕著。過去に大きな音を聞いた経験あり',
-    findings: '右耳は高音域から徐々に低下、左耳はほぼ正常範囲'
+    chiefComplaint: '右耳難聴、耳鳴、めまい感',
+    history: '昨日から突然右耳の耳閉塞感と耳鳴、回転性めまい感あり。今日になってめまい感はだいぶ治ったが、聞こえの悪さは変わらないため受診した',
+    findings: '鼓膜所見正常、ティンパノA型、DPOAE左耳PASS、右耳REFER'
   },
   C: {
     age: '68歳',
