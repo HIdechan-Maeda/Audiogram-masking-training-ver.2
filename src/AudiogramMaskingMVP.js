@@ -1202,7 +1202,7 @@ export default function AudiogramMaskingMVP() {
       Math.round(completedCases.reduce((sum, caseId) => sum + learningProgress.caseAccuracy[caseId].accuracy, 0) / completedCases.length) : 0;
     
     const reportData = {
-      title: 'オーディオグラム学習レポート',
+      title: 'HearSim 学習レポート',
       date: new Date().toLocaleDateString('ja-JP'),
       completedCases: completedCases.length,
       totalCases: 8,
@@ -1223,7 +1223,7 @@ export default function AudiogramMaskingMVP() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>オーディオグラム測定レポート</title>
+        <title>HearSim 測定レポート</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; }
           .header { background: #f0f0f0; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
@@ -1422,7 +1422,7 @@ ${targets.map((target, index) => {
       <div className="w-full min-h-screen flex items-center justify-center bg-gray-50">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full mx-4">
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">オーディオグラム講習会</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">HearSim - オーディオグラム講習会</h1>
             <p className="text-gray-600">参加用パスワードを入力してください</p>
           </div>
           <div className="space-y-4">
@@ -1458,7 +1458,7 @@ ${targets.map((target, index) => {
       <div className="max-w-7xl mx-auto grid gap-6">
         <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">Simple Audiogram builder (Masking simulator)</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">HearSim (Hearing Simulator)</h1>
             <p className="text-sm text-gray-600 mt-1">講習会参加中 - 講師の指示に従って操作してください</p>
           </div>
           <button

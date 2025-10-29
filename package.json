@@ -1,7 +1,7 @@
 {
-  "name": "audiogram-builder",
+  "name": "hearsim",
   "version": "1.0.0",
-  "description": "オーディオグラム作成・マスキングトレーニングアプリケーション",
+  "description": "HearSim - オーディオグラム作成・マスキングトレーニングアプリケーション",
   "main": "index.js",
   "scripts": {
     "start": "react-scripts start",
