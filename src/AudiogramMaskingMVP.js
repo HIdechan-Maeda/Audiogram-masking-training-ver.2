@@ -163,9 +163,9 @@ const PRESET_DETAILS = {
   E: {
     age: '55歳',
     gender: '女性',
-    chiefComplaint: '複合的な難聴の症状',
-    history: '中耳炎の既往歴があり、加齢による変化も認められる',
-    findings: '右耳は伝音成分、左耳は感音成分が優勢'
+    chiefComplaint: '聞こえの悪さ（特に左耳）',
+    history: '徐々に聞こえ悪くなった。最近、電話を左で取ると聞こえづらいのがわかった。今は右耳で電話をとっている。いつから聞こえ悪いのかよくわからない',
+    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域）両耳REFER'
   },
   F: {
     age: '30歳',
