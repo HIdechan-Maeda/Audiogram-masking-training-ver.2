@@ -147,11 +147,11 @@ const PRESET_DETAILS = {
     findings: '鼓膜所見正常、ティンパノA型、DPOAE左耳PASS、右耳REFER'
   },
   C: {
-    age: '68歳',
+    age: '7歳',
     gender: '女性',
-    chiefComplaint: '左耳が全く聞こえない',
-    history: '突然発症した高度難聴、メニエール病の既往歴あり',
-    findings: '左耳は全周波数でScale-Out判定、右耳は軽度の高音域低下'
+    chiefComplaint: '左耳の聞こえの悪さ',
+    history: '入学時の学校検診で左耳難聴を指摘され、精査のため受診した',
+    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE 右耳PASS 左耳REFER'
   },
   D: {
     age: '38歳',
