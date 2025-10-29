@@ -260,12 +260,32 @@ export default function AudiogramMaskingMVP() {
   const [measurementLog, setMeasurementLog] = useState([]);
   
   // Learning progress tracking
-  const [learningProgress, setLearningProgress] = useState({
-    totalSessions: 0,
-    completedCases: [],
-    caseAccuracy: {}, // 症例別の精度 {caseId: {total: number, correct: number, accuracy: number}}
-    lastSessionDate: null
+  const [learningProgress, setLearningProgress] = useState(() => {
+    // ローカルストレージから学習進捗を読み込む
+    try {
+      const saved = localStorage.getItem('audiogram_learning_progress');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('学習進捗の読み込みに失敗:', e);
+    }
+    return {
+      totalSessions: 0,
+      completedCases: [],
+      caseAccuracy: {}, // 症例別の精度 {caseId: {total: number, correct: number, accuracy: number}}
+      lastSessionDate: null
+    };
   });
+
+  // 学習進捗が変更される度にローカルストレージに保存
+  useEffect(() => {
+    try {
+      localStorage.setItem('audiogram_learning_progress', JSON.stringify(learningProgress));
+    } catch (e) {
+      console.error('学習進捗の保存に失敗:', e);
+    }
+  }, [learningProgress]);
 
   // Loading states（ボタン別に分離）
   const [isLoadingPreset, setIsLoadingPreset] = useState(false);
@@ -283,13 +303,33 @@ export default function AudiogramMaskingMVP() {
   const [showIcDialog, setShowIcDialog] = useState(false);
 
   // Random case performance tracking
-  const [randomCasePerformance, setRandomCasePerformance] = useState({
-    totalCases: 0,
-    correctCases: 0,
-    streak: 0,
-    maxStreak: 0,
-    caseHistory: [] // [{caseId, correct, timestamp}]
+  const [randomCasePerformance, setRandomCasePerformance] = useState(() => {
+    // ローカルストレージからランダム症例の成績を読み込む
+    try {
+      const saved = localStorage.getItem('audiogram_random_case_performance');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('ランダム症例成績の読み込みに失敗:', e);
+    }
+    return {
+      totalCases: 0,
+      correctCases: 0,
+      streak: 0,
+      maxStreak: 0,
+      caseHistory: [] // [{caseId, correct, timestamp}]
+    };
   });
+
+  // ランダム症例の成績が変更される度にローカルストレージに保存
+  useEffect(() => {
+    try {
+      localStorage.setItem('audiogram_random_case_performance', JSON.stringify(randomCasePerformance));
+    } catch (e) {
+      console.error('ランダム症例成績の保存に失敗:', e);
+    }
+  }, [randomCasePerformance]);
 
   // Supabase Anonymous Auth
   const [userId, setUserId] = useState(null);
