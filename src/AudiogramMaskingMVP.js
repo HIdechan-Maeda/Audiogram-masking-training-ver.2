@@ -154,11 +154,11 @@ const PRESET_DETAILS = {
     findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE 右耳PASS 左耳REFER'
   },
   D: {
-    age: '38歳',
+    age: '32歳',
     gender: '男性',
-    chiefComplaint: '高音域が聞こえにくい',
-    history: '職場の騒音環境で長年勤務、耳鳴りあり',
-    findings: '両耳とも高音域（4000Hz以上）で聴力低下、低音域は正常範囲'
+    chiefComplaint: '耳閉塞感、耳鳴り、めまい',
+    history: '20歳の時、右耳突発性難聴。1週間前から回転性めまいあり。良くなったり悪くなったり。左耳ゴーという耳鳴りが気になる',
+    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域） 右耳REFER 左耳PASS'
   },
   E: {
     age: '55歳',
