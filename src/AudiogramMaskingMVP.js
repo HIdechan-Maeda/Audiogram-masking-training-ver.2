@@ -182,11 +182,11 @@ const PRESET_DETAILS = {
     findings: '鼓膜所見：色が悪い・陥没あり、ティンパノB型'
   },
   H: {
-    age: '60歳',
+    age: '68歳',
     gender: '男性',
-    chiefComplaint: '平坦な難聴パターン',
-    history: '比較的均一な聴力低下、遺伝的要因の可能性',
-    findings: '両耳とも比較的平坦な難聴パターン、骨導値も低下'
+    chiefComplaint: '耳痛、聞こえの悪さ、耳閉塞感',
+    history: '2日前より耳痛と耳閉塞感あり',
+    findings: '鼓膜所見炎症（＋）、ティンパノ陽圧側にPeak'
   }
 };
 
