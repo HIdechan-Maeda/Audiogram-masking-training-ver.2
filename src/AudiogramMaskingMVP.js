@@ -755,11 +755,22 @@ export default function AudiogramMaskingMVP() {
   const [crossHearingWarning, setCrossHearingWarning] = useState(true); // クロスヒアリング警告のON/OFF
   const [blinkOn, setBlinkOn] = useState(true);
 
+  // 現在位置フラッシュ用（点滅カーソル）
+  const [cursorBlinkOn, setCursorBlinkOn] = useState(true);
+  const [cursorBlinkEnabled, setCursorBlinkEnabled] = useState(true);
+
   useEffect(() => {
     if (!showAnswer) return;
     const id = setInterval(() => setBlinkOn(b => !b), 700);
     return () => clearInterval(id);
   }, [showAnswer]);
+
+  // 現在位置フラッシュの点滅制御
+  useEffect(() => {
+    if (!cursorBlinkEnabled) return;
+    const id = setInterval(() => setCursorBlinkOn(v => !v), 600);
+    return () => clearInterval(id);
+  }, [cursorBlinkEnabled]);
 
   // Debug: log showAnswer state changes
   useEffect(() => {
@@ -841,6 +852,11 @@ export default function AudiogramMaskingMVP() {
   // 周波数が変わったら一度ランプを消灯
   useEffect(() => { setSuppressLamp(true); }, [freq]);
 
+  // 測定条件やレベルが変わったら現在位置フラッシュを再開
+  useEffect(() => {
+    setCursorBlinkEnabled(true);
+  }, [ear, trans, freq, level]);
+
   const freqIndex = useMemo(() => Math.max(0, FREQS.indexOf(freq)), [freq]);
   function moveFreq(dir /* -1 | 1 */) {
     let idx = clamp(freqIndex + dir, 0, FREQS.length - 1);
@@ -902,6 +918,8 @@ export default function AudiogramMaskingMVP() {
     }
     
     setSuppressLamp(false);
+    // 確定操作後はフラッシュを一時停止
+    setCursorBlinkEnabled(false);
   }
 
   // Precise hit: map overlay click to real grid using measured scale/offset
@@ -1933,6 +1951,25 @@ ${targets.map((target, index) => {
                   {SERIES.map(s => (
                     <Scatter key={s.key} name={s.label} data={(seriesData[s.key] || []).map(d => ({ x: d.x, y: d.y, ...(d.so ? { so: true } : {}) }))} fill={s.color} shape={shapeRenderer(s.shape, s.color)} />
                   ))}
+
+                  {/* 現在位置フラッシュ（点滅カーソル） */}
+                  {cursorBlinkEnabled && (
+                    <Scatter
+                      key="cursor-indicator"
+                      name="Current Position"
+                      data={[{ x: Math.max(0, FREQS.indexOf(freq)), y: round5(level) }]}
+                      shape={(props) => {
+                        const { cx, cy } = props;
+                        const r = MARK_R + 4;
+                        return (
+                          <g style={{ opacity: cursorBlinkOn ? 1 : 0 }}>
+                            <circle cx={cx} cy={cy} r={r} stroke="#f59e0b" strokeWidth={2} fill="rgba(245, 158, 11, 0.12)" />
+                            <circle cx={cx} cy={cy} r={2} fill="#f59e0b" />
+                          </g>
+                        );
+                      }}
+                    />
+                  )}
 
                   {['R-AC', 'L-AC'].map(key => {
                     const s = SERIES.find(ser => ser.key.startsWith(key));
