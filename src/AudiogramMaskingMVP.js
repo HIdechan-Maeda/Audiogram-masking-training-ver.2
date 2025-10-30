@@ -1897,9 +1897,30 @@ ${targets.map((target, index) => {
                   if (maskLevel < 0) setMaskLevel(0); 
                 }}>Masked</TinyToggle>
               </div>
-              <div className="flex items-center gap-2 min-w-[180px]">
-                <input type="range" min={-15} max={110} step={5} value={maskLevel} onChange={e => setMaskLevel(parseInt(e.target.value))} className="w-40" />
-                <div className="w-16 text-right text-xs font-mono">{maskLevel} dB</div>
+              <div className="flex items-center gap-2 min-w-[260px]">
+                <input
+                  type="range"
+                  min={-15}
+                  max={110}
+                  step={5}
+                  value={maskLevel}
+                  onChange={e => setMaskLevel(parseInt(e.target.value))}
+                  className="w-40"
+                />
+                <input
+                  type="number"
+                  min={-15}
+                  max={110}
+                  step={5}
+                  value={maskLevel}
+                  onChange={e => {
+                    const v = parseInt(e.target.value);
+                    if (Number.isNaN(v)) return;
+                    setMaskLevel(clamp(v, -15, 110));
+                  }}
+                  className="w-20 px-2 py-1 border rounded text-xs font-mono text-right"
+                />
+                <div className="w-10 text-right text-xs font-mono">dB</div>
               </div>
               <button onClick={() => setShowAnswer(a => !a)} className={`px-2 py-1 rounded-lg border text-xs ${showAnswer ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-800'}`} title="正答（オーバーレイ）を表示/非表示">
                 {showAnswer ? '正答表示: ON' : '正答表示: OFF'}
