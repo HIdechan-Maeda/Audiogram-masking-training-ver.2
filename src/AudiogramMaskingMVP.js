@@ -491,9 +491,8 @@ export default function AudiogramMaskingMVP() {
                    generatedTargets.push({ ear, transducer: 'AC', masked: false, freq, dB: acValues[freq] });
                  });
                  
-                 // 次にBC値を生成（正常：AC±5dBの範囲内、下限0dB）
-                 frequencies.forEach(freq => {
-                   if (freq === 125 || freq === 8000) return; // BC値は125Hzと8000Hzでは測定しない
+                // 次にBC値を生成（正常：AC±5dBの範囲内、下限0dB）
+                frequencies.forEach(freq => {
                    const acValue = acValues[freq];
                    // 正常ではGAPは±5dB以内
                    const minBC = Math.max(0, acValue - 5); // AC-5dBまで（下限0dB）
@@ -549,9 +548,8 @@ export default function AudiogramMaskingMVP() {
                    generatedTargets.push({ ear, transducer: 'AC', masked: false, freq, dB: acValues[freq] });
                  });
                  
-                 // 次にBC値を生成（感音性難聴：AC±5dBの範囲内、下限0dB）
-                 frequencies.forEach(freq => {
-                   if (freq === 125 || freq === 8000) return; // BC値は125Hzと8000Hzでは測定しない
+                // 次にBC値を生成（感音性難聴：AC±5dBの範囲内、下限0dB）
+                frequencies.forEach(freq => {
                    const acValue = acValues[freq];
                    // 感音性難聴ではGAPは±5dB以内
                    const minBC = Math.max(0, acValue - 5); // AC-5dBまで（下限0dB）
@@ -586,9 +584,8 @@ export default function AudiogramMaskingMVP() {
                    generatedTargets.push({ ear, transducer: 'AC', masked: false, freq, dB: acValues[freq] });
                  });
                  
-                 // 次にBC値を生成（AC値-30dB〜AC値+5dBの範囲内、下限0dB）
-                 frequencies.forEach(freq => {
-                   if (freq === 125 || freq === 8000) return; // BC値は125Hzと8000Hzでは測定しない
+                // 次にBC値を生成（AC値-30dB〜AC値+5dBの範囲内、下限0dB）
+                frequencies.forEach(freq => {
                    const acValue = acValues[freq];
                    // GAPが30dBを超えないように制約
                    const minBC = Math.max(0, acValue - 30); // 下限0dB
@@ -618,9 +615,8 @@ export default function AudiogramMaskingMVP() {
                    generatedTargets.push({ ear, transducer: 'AC', masked: false, freq, dB: acValues[freq] });
                  });
                  
-                 // 次にBC値を生成（AC値-30dB〜AC値+5dBの範囲内、下限0dB）
-                 frequencies.forEach(freq => {
-                   if (freq === 125 || freq === 8000) return; // BC値は125Hzと8000Hzでは測定しない
+                // 次にBC値を生成（AC値-30dB〜AC値+5dBの範囲内、下限0dB）
+                frequencies.forEach(freq => {
                    const acValue = acValues[freq];
                    // GAPが30dBを超えないように制約
                    const minBC = Math.max(0, acValue - 30); // 下限0dB
