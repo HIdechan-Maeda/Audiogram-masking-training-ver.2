@@ -814,7 +814,7 @@ export default function AudiogramMaskingMVP() {
           setSuppressLamp(false);
           // 自動で打点追加（応答ランプが点灯した時のみログ記録）
           setTimeout(() => {
-            addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(newLevel) });
+            addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(newLevel) }, { disableBlinkAfter: false });
           }, 50);
           return newLevel;
         });
@@ -827,7 +827,7 @@ export default function AudiogramMaskingMVP() {
           setSuppressLamp(false);
           // 自動で打点追加（応答ランプが点灯した時のみログ記録）
           setTimeout(() => {
-            addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(newLevel) });
+            addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(newLevel) }, { disableBlinkAfter: false });
           }, 50);
           return newLevel;
         });
@@ -867,7 +867,8 @@ export default function AudiogramMaskingMVP() {
   }
 
   // clicking on chart -> add/replace point for current ear/trans/masked+freq
-  function addOrReplacePoint(p) {
+  function addOrReplacePoint(p, opts) {
+    const disableBlinkAfter = opts && typeof opts.disableBlinkAfter === 'boolean' ? opts.disableBlinkAfter : true;
     if (p.transducer === 'BC' && BC_DISABLED.has(p.freq)) {
       setSuppressLamp(true);
       return;
@@ -914,8 +915,8 @@ export default function AudiogramMaskingMVP() {
     }
     
     setSuppressLamp(false);
-    // 確定操作後はフラッシュを一時停止
-    setCursorBlinkEnabled(false);
+    // 確定操作後のフラッシュ制御（デフォルト: 停止、キーボード自動打点時は継続）
+    if (disableBlinkAfter) setCursorBlinkEnabled(false);
   }
 
   // Precise hit: map overlay click to real grid using measured scale/offset
@@ -945,7 +946,7 @@ export default function AudiogramMaskingMVP() {
     const so = atMax && !heardAtMax;
 
     const p = { ear, transducer: trans, masked, freq, dB: atMax ? max : dBclamped, ...(so ? { so: true } : {}) };
-    addOrReplacePoint(p);
+    addOrReplacePoint(p, { disableBlinkAfter: true });
     setLevel(p.dB);
     setSuppressLamp(false);
   }
@@ -1809,7 +1810,7 @@ ${targets.map((target, index) => {
             <Control label="打点">
               <div className="flex gap-2">
                 <button 
-                  onClick={() => addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(level) })} 
+                  onClick={() => addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(level) }, { disableBlinkAfter: true })} 
                   className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors active:scale-95 transform"
                 >
                   追加/更新
