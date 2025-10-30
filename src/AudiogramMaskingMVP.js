@@ -1927,8 +1927,8 @@ ${targets.map((target, index) => {
               />
               <ComposedChart width={chartW} height={chartH} data={[]} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" dataKey="x" domain={X_DOMAIN} ticks={Array.from({ length: FREQS.length }, (_, i) => i)} tickFormatter={formatFreq} label={{ value: 'Frequency (Hz) - 1 octave/grid', position: 'bottom', offset: 6, style: { fontSize: 18 } }} tick={{ fontSize: 18 }} />
-                  <YAxis type="number" dataKey="y" domain={[Y_MIN, Y_MAX]} ticks={Array.from({ length: (Y_MAX - Y_MIN) / 10 + 1 }, (_, i) => Y_MIN + i * 10)} reversed={true} tickMargin={6} label={{ value: 'Hearing Level (dB HL) - 10 dB/grid', angle: -90, position: 'left', offset: 0, dy: -100, style: { fontSize: 18 } }} tick={{ fontSize: 18 }} />
+                  <XAxis type="number" dataKey="x" domain={X_DOMAIN} ticks={Array.from({ length: FREQS.length }, (_, i) => i)} tickFormatter={formatFreq} label={{ value: 'Frequency (Hz) - 1 octave/grid', position: 'bottom', offset: 6, style: { fontSize: 22 } }} tick={{ fontSize: 20 }} />
+                  <YAxis type="number" dataKey="y" domain={[Y_MIN, Y_MAX]} ticks={Array.from({ length: (Y_MAX - Y_MIN) / 10 + 1 }, (_, i) => Y_MIN + i * 10)} reversed={true} tickMargin={6} label={{ value: 'Hearing Level (dB HL) - 10 dB/grid', angle: -90, position: 'left', offset: 0, dy: -100, style: { fontSize: 22 } }} tick={{ fontSize: 20 }} />
                   <Line data={[{ x: 0, y: 0 }, { x: FREQS.length - 1, y: 0 }]} dataKey="y" xAxisId={0} yAxisId={0} type="monotone" dot={false} stroke="#94a3b8" strokeWidth={2} />
 
                   {SERIES.map(s => (
@@ -1974,7 +1974,7 @@ ${targets.map((target, index) => {
             {showLegend && (
               <div className="shrink-0 pl-2" style={{ display: 'flex', alignItems: 'flex-start' }}>
                 <div className="flex flex-col gap-3">
-                  <ul className="space-y-0.5 text-[16px] leading-tight pr-1">
+                  <ul className="space-y-0.5 text-[18px] leading-tight pr-1">
                     {SERIES.map(s => (
                       <li key={s.key} className="flex items-center gap-2">
                         <LegendMark shape={s.shape} color={s.color} />
@@ -1982,10 +1982,10 @@ ${targets.map((target, index) => {
                       </li>
                     ))}
                   </ul>
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-[13px] leading-snug max-w-[260px]">
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-[15px] leading-snug max-w-[300px]">
                     <div className="flex items-start gap-2 mb-1">
-                      <div className="text-green-600">⌨️</div>
-                      <div className="font-semibold text-green-800">キーボード操作</div>
+                      <div className="text-green-600 text-[18px]">⌨️</div>
+                      <div className="font-semibold text-green-800 text-[16px]">キーボード操作</div>
                     </div>
                     <div className="text-green-700">
                       <div><strong>カーソルキー:</strong> ←→ 周波数 | ↑ -5dB(自動打点) | ↓ +5dB(自動打点)</div>
