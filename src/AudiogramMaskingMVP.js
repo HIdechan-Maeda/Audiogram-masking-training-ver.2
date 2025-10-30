@@ -1565,20 +1565,7 @@ ${targets.map((target, index) => {
           </div>
         </div>
 
-        {/* キーボード操作説明 */}
-        <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
-          <div className="flex items-start gap-3">
-            <div className="text-green-600 text-xl">⌨️</div>
-            <div>
-              <div className="font-semibold text-green-800">キーボード操作</div>
-              <div className="text-sm text-green-700 mt-1">
-                <strong>カーソルキー:</strong> ←→周波数変更 | ↑-5dB調整(自動打点) | ↓+5dB調整(自動打点)<br/>
-                <strong>削除:</strong> DeleteキーまたはBackspaceキーで現在の打点削除<br/>
-                <strong>マウス:</strong> チャートクリックでも打点可能
-              </div>
-            </div>
-          </div>
-        </div>
+        
 
         {/* IC Settings */}
         <div className="bg-white rounded-2xl shadow p-4">
@@ -1986,14 +1973,27 @@ ${targets.map((target, index) => {
             </div>
             {showLegend && (
               <div className="shrink-0 pl-2" style={{ display: 'flex', alignItems: 'flex-start' }}>
-                <ul className="space-y-0.5 text-[16px] leading-tight pr-1">
-                  {SERIES.map(s => (
-                    <li key={s.key} className="flex items-center gap-2">
-                      <LegendMark shape={s.shape} color={s.color} />
-                      <span>{s.label}</span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="flex flex-col gap-3">
+                  <ul className="space-y-0.5 text-[16px] leading-tight pr-1">
+                    {SERIES.map(s => (
+                      <li key={s.key} className="flex items-center gap-2">
+                        <LegendMark shape={s.shape} color={s.color} />
+                        <span>{s.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-[13px] leading-snug max-w-[260px]">
+                    <div className="flex items-start gap-2 mb-1">
+                      <div className="text-green-600">⌨️</div>
+                      <div className="font-semibold text-green-800">キーボード操作</div>
+                    </div>
+                    <div className="text-green-700">
+                      <div><strong>カーソルキー:</strong> ←→ 周波数 | ↑ -5dB(自動打点) | ↓ +5dB(自動打点)</div>
+                      <div><strong>削除:</strong> Delete/Backspace で現在の打点削除</div>
+                      <div><strong>マウス:</strong> チャートクリックで打点</div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
