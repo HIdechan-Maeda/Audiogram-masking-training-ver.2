@@ -1989,7 +1989,21 @@ ${targets.map((target, index) => {
                   })}
 
                   {showAnswer && SERIES.map(s => (
-                    <Scatter key={`ans-${s.key}`} name={`${s.label} (answer)`} data={answerSeriesData[s.key] || []} fill="#10b981" shape={(props) => (<g style={{ opacity: blinkOn ? 1 : 0 }}>{shapeRenderer(s.shape, '#10b981')(props)}</g>)} isAnimationActive={false} />
+                    <Scatter
+                      key={`ans-${s.key}`}
+                      name={`${s.label} (answer)`}
+                      data={answerSeriesData[s.key] || []}
+                      fill="#10b981"
+                      shape={(props) => (
+                        <g style={{ opacity: blinkOn ? 1 : 0 }}>
+                          {shapeRenderer(s.shape, '#10b981')(props)}
+                          {props?.payload?.so && (
+                            <text x={props.cx + 10} y={props.cy - 10} fill="#10b981" fontSize={12} fontWeight="bold">SO</text>
+                          )}
+                        </g>
+                      )}
+                      isAnimationActive={false}
+                    />
                   ))}
                   {showAnswer && SERIES.filter(s => s.key.includes('-AC-')).map(s => (
                     <Line key={`ans-line-${s.key}`} data={answerLineData[s.key] || []} dataKey="y" stroke="#10b981" strokeOpacity={0.35} isAnimationActive={false} strokeWidth={2} dot={false} strokeDasharray={'4 6'} type="linear" connectNulls={false} />
