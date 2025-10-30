@@ -1873,9 +1873,9 @@ ${targets.map((target, index) => {
         <div className="bg-white rounded-2xl shadow p-5">
           <div className="flex items-center gap-3 mb-2">
             <h2 className="text-lg font-semibold">Audiogram</h2>
-            <div className={`flex items-center gap-2 px-2 py-1 rounded-full border ${lampOn ? 'bg-orange-50 border-orange-300' : 'bg-white border-gray-300'}`}>
-              <div className={`w-3.5 h-3.5 rounded-full ${lampOn ? 'bg-orange-500' : 'bg-gray-300'}`} />
-              <span className="text-xs">応答ランプ</span>
+            <div className={`flex items-center gap-3 px-3 py-1.5 rounded-full border ${lampOn ? 'bg-orange-50 border-orange-300' : 'bg-white border-gray-300'}`}>
+              <div className={`w-5 h-5 rounded-full ${lampOn ? 'bg-orange-500' : 'bg-gray-300'}`} />
+              <span className="text-sm">応答ランプ</span>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-600">Masking (NTE: {ear === 'R' ? 'L' : 'R'})</span>
