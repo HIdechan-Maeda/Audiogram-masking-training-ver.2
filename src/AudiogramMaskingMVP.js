@@ -1985,15 +1985,15 @@ ${targets.map((target, index) => {
                       </li>
                     ))}
                   </ul>
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-[15px] leading-snug max-w-[300px]">
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-[15px] leading-snug max-w-[420px]">
                     <div className="flex items-start gap-2 mb-1">
                       <div className="text-green-600 text-[18px]">⌨️</div>
                       <div className="font-semibold text-green-800 text-[16px]">キーボード操作</div>
                     </div>
                     <div className="text-green-700 space-y-1">
-                      <div className="whitespace-nowrap">カーソルキー</div>
-                      <div className="whitespace-nowrap">削除</div>
-                      <div className="whitespace-nowrap">マウス</div>
+                      <div className="whitespace-nowrap"><strong>カーソルキー:</strong> ←→ 周波数 | ↑ -5dB(自動打点) | ↓ +5dB(自動打点)</div>
+                      <div className="whitespace-nowrap"><strong>削除:</strong> Delete/Backspace で現在の打点削除</div>
+                      <div className="whitespace-nowrap"><strong>マウス:</strong> チャートクリックで打点</div>
                     </div>
                   </div>
                 </div>
