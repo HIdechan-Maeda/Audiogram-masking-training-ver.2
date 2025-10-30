@@ -1875,7 +1875,10 @@ ${targets.map((target, index) => {
             <h2 className="text-lg font-semibold">Audiogram</h2>
             <div className={`flex items-center gap-3 px-3 py-1.5 rounded-full border ${lampOn ? 'bg-orange-50 border-orange-300' : 'bg-white border-gray-300'}`}>
               <div className={`w-5 h-5 rounded-full ${lampOn ? 'bg-orange-500' : 'bg-gray-300'}`} />
-              <span className="text-sm">応答ランプ</span>
+              <div className="flex flex-col leading-tight text-sm text-gray-800">
+                <span className="-mb-0.5">応答</span>
+                <span>ランプ</span>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-600">Masking (NTE: {ear === 'R' ? 'L' : 'R'})</span>
