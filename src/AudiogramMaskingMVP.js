@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
 import { supabase } from './supabaseClient';
 import { ResponsiveContainer, ComposedChart, XAxis, YAxis, CartesianGrid, Scatter, Line } from "recharts";
+import TympanogramGif from './TympanogramGif';
+import StapedialReflexGif from './StapedialReflexGif';
+import DPOAE from './DPOAE';
 
 // Audiogram-first Masking Trainer (MVP v2.4.9)
 // - 1oct/grid x 10dB ticks; 1oct == 20dB; AC O/X, BC </> []
@@ -137,62 +140,303 @@ const PRESET_DETAILS = {
     gender: '男子',
     chiefComplaint: '学校検診で聞こえの悪さを指摘された',
     history: '本人から話を聞くと周囲がうるさくて、検査音が聞こえなかった様子。念の為受信した',
-    findings: '鼓膜所見正常、ティンパノA型、DPOAEは両耳PASSである'
+    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAEは両耳PASSである',
+    tympanogram: { 
+      type: 'A', 
+      left: { peakPressure: 0, peakCompliance: 1.5, sigma: 60 },
+      right: { peakPressure: 0, peakCompliance: 1.3, sigma: 60 }
+    }
   },
   B: {
     age: '45歳',
     gender: '男性',
     chiefComplaint: '右耳難聴、耳鳴、めまい感',
     history: '昨日から突然右耳の耳閉塞感と耳鳴、回転性めまい感あり。今日になってめまい感はだいぶ治ったが、聞こえの悪さは変わらないため受診した',
-    findings: '鼓膜所見正常、ティンパノA型、DPOAE左耳PASS、右耳REFER'
+    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE左耳PASS、右耳REFER',
+    tympanogram: { 
+      type: 'A', 
+      left: { peakPressure: -10, peakCompliance: 1.5, sigma: 60 },
+      right: { peakPressure: 0, peakCompliance: 1.3, sigma: 60 }
+    }
   },
   C: {
     age: '7歳',
     gender: '女性',
     chiefComplaint: '左耳の聞こえの悪さ',
     history: '入学時の学校検診で左耳難聴を指摘され、精査のため受診した',
-    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE 右耳PASS 左耳REFER'
+    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE 右耳PASS 左耳REFER',
+    tympanogram: { 
+      type: 'A', 
+      left: { peakPressure: 0, peakCompliance: 0.8, sigma: 60 },
+      right: { peakPressure: 0, peakCompliance: 0.9, sigma: 60 }
+    }
   },
   D: {
     age: '32歳',
     gender: '男性',
     chiefComplaint: '耳閉塞感、耳鳴り、めまい',
     history: '20歳の時、右耳突発性難聴。1週間前から回転性めまいあり。良くなったり悪くなったり。左耳ゴーという耳鳴りが気になる',
-    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域） 右耳REFER 左耳PASS'
+    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域） 右耳REFER 左耳PASS',
+    tympanogram: { 
+      type: 'A', 
+      left: { peakPressure: -15, peakCompliance: 1.3, sigma: 60 },
+      right: { peakPressure: 10, peakCompliance: 1.5, sigma: 60 }
+    }
   },
   E: {
     age: '55歳',
     gender: '女性',
     chiefComplaint: '聞こえの悪さ（特に左耳）',
     history: '徐々に聞こえ悪くなった。最近、電話を左で取ると聞こえづらいのがわかった。今は右耳で電話をとっている。いつから聞こえ悪いのかよくわからない',
-    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域）両耳REFER'
+    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域）両耳REFER',
+    tympanogram: { 
+      type: 'A', 
+      left: { peakPressure: -10, peakCompliance: 1.2, sigma: 60 },
+      right: { peakPressure: 15, peakCompliance: 1.4, sigma: 60 }
+    }
   },
   F: {
     age: '70歳',
     gender: '女性',
     chiefComplaint: 'TVの音が聞こえにくい',
     history: 'ご主人から聞こえの悪さを指摘される。TVの音が大きいと言われる。そう言われたらそうかなと。ご主人が補聴器を勧めてきたので、仕方なく受診した',
-    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域）両耳REFER'
+    findings: '鼓膜所見正常、ティンパノ両耳A型、DPOAE（高周波数域）両耳REFER',
+    tympanogram: { 
+      type: 'A', 
+      left: { peakPressure: 5, peakCompliance: 1.1, sigma: 60 },
+      right: { peakPressure: -20, peakCompliance: 1.3, sigma: 60 }
+    }
   },
   G: {
     age: '12歳',
     gender: '女性',
     chiefComplaint: '鼻水が出る。聞こえの悪さ',
     history: '小さい頃から滲出性中耳炎を繰り返す',
-    findings: '鼓膜所見：色が悪い・陥没あり、ティンパノB型'
+    findings: '鼓膜所見：色が悪い・陥没あり、ティンパノB型',
+    tympanogram: { 
+      type: 'B', 
+      left: { peakPressure: -200, peakCompliance: 0.2, sigma: 80 },
+      right: { peakPressure: -200, peakCompliance: 0.1, sigma: 80 }
+    }
   },
   H: {
     age: '68歳',
     gender: '男性',
     chiefComplaint: '耳痛、聞こえの悪さ、耳閉塞感',
     history: '2日前より耳痛と耳閉塞感あり',
-    findings: '鼓膜所見炎症（＋）、ティンパノ陽圧側にPeak'
+    findings: '鼓膜所見炎症（＋）、ティンパノ右A型・左A型',
+    tympanogram: { 
+      type: 'MIX', 
+      left: { peakPressure: 0, peakCompliance: 1.2, sigma: 60 },     // 左A型
+      right: { peakPressure: 100, peakCompliance: 0.6, sigma: 60 }   // 右A型（陽圧）
+    }
   }
 };
+
+// ART設定を構築する関数（プリセットのAC/BC値とティンパノグラム型から）
+function buildArtConfig(presetTargets, tympanogram) {
+  const acThresholds = { right: {}, left: {} };
+  const bcThresholds = { right: {}, left: {} };
+  
+  // プリセットからAC/BC値を抽出（ART用の周波数: 500, 1000, 2000Hz）
+  presetTargets.forEach(target => {
+    if ([500, 1000, 2000].includes(target.freq)) {
+      const earKey = target.ear === 'R' ? 'right' : 'left';
+      if (target.transducer === 'AC') {
+        acThresholds[earKey][target.freq] = target.so ? 110 : target.dB;
+      } else if (target.transducer === 'BC') {
+        bcThresholds[earKey][target.freq] = target.so ? 110 : target.dB;
+      }
+    }
+  });
+  
+  // ティンパノグラム型とpeakPressureを取得
+  const getTympanogramType = (ear, tymp) => {
+    if (tymp?.type === 'B') return 'B';
+    const peak = tymp?.[ear]?.peakPressure || 0;
+    // 陽圧（peakPressure>50daPa）は伝音障害として扱う
+    if (peak > 50) return 'B';
+    if (peak < -150) return 'B';  // 陰圧が強すぎる場合もB型
+    return 'A';
+  };
+  
+  return {
+    right: {
+      acThresholds: acThresholds.right,
+      bcThresholds: bcThresholds.right,
+      tympanogramType: getTympanogramType('right', tympanogram),
+      peakPressure: tympanogram?.right?.peakPressure || 0
+    },
+    left: {
+      acThresholds: acThresholds.left,
+      bcThresholds: bcThresholds.left,
+      tympanogramType: getTympanogramType('left', tympanogram),
+      peakPressure: tympanogram?.left?.peakPressure || 0
+    }
+  };
+}
+
+// DPOAE設定を構築する関数（プリセットのAC値とティンパノグラム型から）
+function buildDPOAEConfig(presetTargets, tympanogram) {
+  // DPOAEの周波数: [1, 2, 3, 4, 6, 8] kHz
+  const dpoaeFrequencies = [1, 2, 3, 4, 6, 8];
+  
+  // オージオグラムのAC値を抽出（Hz単位で保存）
+  const audiogramAC = { right: {}, left: {} };
+  presetTargets.forEach(target => {
+    if (target.transducer === 'AC') {
+      const earKey = target.ear === 'R' ? 'right' : 'left';
+      audiogramAC[earKey][target.freq] = target.so ? 110 : target.dB;
+    }
+  });
+  
+  // DPOAE周波数とオージオグラム周波数の対応マッピング
+  // DPOAE 3kHz → オージオグラム 4kHz
+  // DPOAE 6kHz → オージオグラム 8kHz
+  // その他は直接対応
+  const freqMapping = {
+    1: 1000,   // DPOAE 1kHz → オージオグラム 1kHz
+    2: 2000,   // DPOAE 2kHz → オージオグラム 2kHz
+    3: 4000,   // DPOAE 3kHz → オージオグラム 4kHz
+    4: 4000,   // DPOAE 4kHz → オージオグラム 4kHz
+    6: 8000,   // DPOAE 6kHz → オージオグラム 8kHz
+    8: 8000    // DPOAE 8kHz → オージオグラム 8kHz
+  };
+  
+  // DPOAE周波数ごとにAC値を設定
+  const acThresholds = { right: {}, left: {} };
+  dpoaeFrequencies.forEach(dpoaeFreq => {
+    const audiogramFreq = freqMapping[dpoaeFreq];
+    ['right', 'left'].forEach(ear => {
+      const earKey = ear;
+      const acValue = audiogramAC[earKey][audiogramFreq];
+      if (acValue !== undefined) {
+        acThresholds[earKey][dpoaeFreq] = acValue;
+      }
+    });
+  });
+  
+  // ティンパノグラム型を取得
+  const getTympanogramType = (ear, tymp) => {
+    if (tymp?.type === 'B') return 'B';
+    const peak = tymp?.[ear]?.peakPressure || 0;
+    // 陽圧（peakPressure>50daPa）は伝音障害として扱う
+    if (peak > 50) return 'B';
+    if (peak < -150) return 'B';  // 陰圧が強すぎる場合もB型
+    return 'A';
+  };
+  
+  const tympanogramType = {
+    right: getTympanogramType('right', tympanogram),
+    left: getTympanogramType('left', tympanogram)
+  };
+  
+  return {
+    acThresholds,
+    tympanogramType
+  };
+}
+
+// DPOAEデータを生成する関数（症例ごとに固定値）
+function generateDPOAEData(dpoaeConfig, caseId = '') {
+  const frequencies = [1, 2, 3, 4, 6, 8];
+  
+  // ノイズフロアの基本値（周波数ごとの範囲の中間値）
+  const noiseFloorBase = {
+    1: 17,   // 12-22 の中央値
+    2: 15,   // 10-20 の中央値
+    3: 13,   // 8-18 の中央値
+    4: 11.5, // 7-16 の中央値
+    6: 10,   // 6-14 の中央値
+    8: 10    // 6-14 の中央値
+  };
+  
+  // デターミニスティックなノイズフロア（症例IDと周波数、耳に基づく固定変動）
+  // 左右で異なるノイズフロア値を生成
+  const getNoiseFloor = (freq, ear) => {
+    const base = noiseFloorBase[freq];
+    // 症例IDと周波数、耳に基づく固定変動パターン（左右で異なる変動を加える）
+    // 右耳と左耳で異なるseedを使用して、左右で異なるノイズフロア値を生成
+    const earMultiplier = ear === 'right' ? 1 : 3; // 左右で異なるパターンを作るための係数
+    const seed = (caseId.charCodeAt(0) || 65) * 100 + freq * 10 + earMultiplier;
+    // 左右で異なる変動パターン（右耳はsin系、左耳はcos系に偏らせる）
+    const sinVariation = Math.sin(seed * 0.1) * 2.5;
+    const cosVariation = Math.cos(seed * 0.15) * 1.5;
+    const variation = ear === 'right' 
+      ? sinVariation + cosVariation * 0.8  // 右耳のパターン
+      : cosVariation + sinVariation * 0.8; // 左耳のパターン（異なるパターン）
+    const rangeMin = { 1: 12, 2: 10, 3: 8, 4: 7, 6: 6, 8: 6 }[freq];
+    const rangeMax = { 1: 22, 2: 20, 3: 18, 4: 16, 6: 14, 8: 14 }[freq];
+    return Math.max(rangeMin, Math.min(rangeMax, base + variation));
+  };
+  
+  const generateEarData = (ear) => {
+    const acThresholds = dpoaeConfig.acThresholds[ear];
+    const tympanogramType = dpoaeConfig.tympanogramType[ear];
+    
+    return frequencies.map((freq, index) => {
+      const acThreshold = acThresholds[freq];
+      const noiseFloor = getNoiseFloor(freq, ear);
+      
+      // ルール判定
+      // 1. 中耳疾患がある（ティンパノB型）→ SNR < 2dB
+      // 2. AC ≥ 35dB → SNR < 2dB
+      // 3. それ以外 → 正常（SNR 6〜12dB、確実に6以上になるように）
+      
+      let snr;
+      if (tympanogramType === 'B' || (acThreshold !== undefined && acThreshold >= 35)) {
+        // 異常: SNR < 2dB（固定値: 約1dB）
+        // 症例と周波数に基づく固定値で、右左で差が出るように
+        const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
+        snr = 0.5 + (Math.sin(seed * 0.1) * 0.5 + Math.cos(seed * 0.2) * 0.3); // 0.5〜1.5dB程度の固定値
+      } else {
+        // 正常: SNR 6〜12dB（固定値で右左に差、確実に6以上になるように）
+        // 症例と周波数に基づく固定値
+        const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
+        // 右耳と左耳で若干差が出るように（±1-2dB程度）
+        const baseSNR = 8; // 基本SNR 8dB
+        const earOffset = ear === 'right' ? Math.sin(seed * 0.05) * 1.5 : Math.cos(seed * 0.05) * 1.5;
+        // SNRが確実に6以上になるように（最小値6dB、最大値12dB程度）
+        snr = Math.max(6, Math.min(12, baseSNR + earOffset));
+      }
+      
+      const dpoaeLevel = noiseFloor + snr;
+      
+      return Math.max(0, Math.min(30, dpoaeLevel)); // 0〜30dBの範囲にクランプ
+    });
+  };
+  
+  // ノイズフロアデータも生成（SNR計算用）
+  const noiseFloorData = {
+    right: frequencies.map((freq) => getNoiseFloor(freq, 'right')),
+    left: frequencies.map((freq) => getNoiseFloor(freq, 'left'))
+  };
+  
+  return {
+    right: generateEarData('right'),
+    left: generateEarData('left'),
+    noiseFloor: noiseFloorData
+  };
+}
 
 function buildTargetsFromPreset(preset){
   return preset.targets.map(t => ({...t}));
 }
+
+// 各症例のART設定を構築
+const PRESET_MAP = {
+  A: PRESET_A, B: PRESET_B, C: PRESET_C, D: PRESET_D,
+  E: PRESET_E, F: PRESET_F, G: PRESET_G, H: PRESET_H
+};
+
+Object.keys(PRESET_DETAILS).forEach(caseId => {
+  const preset = PRESET_MAP[caseId];
+  const tympanogram = PRESET_DETAILS[caseId].tympanogram;
+  if (preset && tympanogram) {
+    PRESET_DETAILS[caseId].artConfig = buildArtConfig(preset.targets, tympanogram);
+    PRESET_DETAILS[caseId].dpoaeConfig = buildDPOAEConfig(preset.targets, tympanogram);
+  }
+});
 
 // helpers
 function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
@@ -314,6 +558,15 @@ export default function AudiogramMaskingMVP() {
   // Preset targets (secret answer)
   const [targets, setTargets] = useState([]);
   const [selectedPreset, setSelectedPreset] = useState('A');
+  
+  // Tympanogram state
+  const [showTympanogram, setShowTympanogram] = useState(false);
+  
+  // ART (Stapedial Reflex) state
+  const [showStapedialReflex, setShowStapedialReflex] = useState(false);
+  
+  // DPOAE state
+  const [showDPOAE, setShowDPOAE] = useState(false);
 
 
   // Measurement log for masking comparison
@@ -1688,6 +1941,101 @@ ${targets.map((target, index) => {
           </div>
         )}
 
+        {/* Tympanogram Modal */}
+        {showTympanogram && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-lg p-6 max-w-4xl w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold text-blue-800">ティンパノグラム検査</h3>
+                <button
+                  onClick={() => setShowTympanogram(false)}
+                  className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
+                >
+                  閉じる
+                </button>
+              </div>
+              <TympanogramGif 
+                width={800}
+                height={600}
+                tympanogramData={currentCaseInfo?.tympanogram}
+                durationMs={5000}
+                fps={20}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ART (Stapedial Reflex) Modal */}
+        {showStapedialReflex && currentCaseInfo?.artConfig && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-lg p-6 max-w-5xl w-full mx-4 max-h-[95vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold text-purple-800">あぶみ骨筋反射（ART）検査</h3>
+                <button
+                  onClick={() => setShowStapedialReflex(false)}
+                  className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
+                >
+                  閉じる
+                </button>
+              </div>
+              <StapedialReflexGif
+                width={1000}
+                height={900}
+                durationMs={17000}
+                fps={20}
+                hearingConfig={currentCaseInfo.artConfig}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* DPOAE Modal */}
+        {showDPOAE && currentCaseInfo?.dpoaeConfig && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-lg p-6 max-w-[95vw] w-full mx-4 max-h-[95vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold text-orange-800">DPOAE検査</h3>
+                <button
+                  onClick={() => setShowDPOAE(false)}
+                  className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
+                >
+                  閉じる
+                </button>
+              </div>
+              {(() => {
+                try {
+                  if (!currentCaseInfo?.dpoaeConfig) {
+                    return <div className="text-red-600 p-4">DPOAE設定が見つかりません</div>;
+                  }
+                  const caseId = currentCaseInfo?.caseId || selectedPreset || 'A';
+                  const dpoaeData = generateDPOAEData(currentCaseInfo.dpoaeConfig, caseId);
+                  // ウィンドウ幅に応じて適応的にサイズを調整（最小幅1100px）
+                  const containerWidth = Math.max(1100, window.innerWidth * 0.9);
+                  return (
+                    <div style={{ width: '100%', overflowX: 'auto' }}>
+                      <DPOAE
+                        width={containerWidth}
+                        height={600}
+                        dpoaeData={dpoaeData}
+                        durationMs={10000}
+                        fps={20}
+                      />
+                    </div>
+                  );
+                } catch (error) {
+                  console.error('DPOAE Error:', error);
+                  return (
+                    <div className="text-red-600 p-4">
+                      <p>DPOAEグラフの読み込み中にエラーが発生しました:</p>
+                      <pre className="text-xs mt-2 bg-gray-100 p-2 rounded">{error.message}</pre>
+                    </div>
+                  );
+                }
+              })()}
+            </div>
+          </div>
+        )}
+
         {/* Preset loader (secret) */}
         <div className="bg-white rounded-2xl shadow p-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -1724,12 +2072,15 @@ ${targets.map((target, index) => {
                 setPresetToast(`症例${selectedPreset}をロードしました`);
                 setTimeout(()=> setPresetToast(''), 1200);
                 
-                // 症例情報を表示
+                // 症例情報を設定
                 const caseDetails = PRESET_DETAILS[selectedPreset];
                 if (caseDetails) {
                   setCurrentCaseInfo({ caseId: selectedPreset, ...caseDetails });
                   setShowCaseInfoModal(true);
                 }
+                
+                // ティンパノグラムを最初に表示
+                setShowTympanogram(true);
               }}
               disabled={isLoadingPreset}
             >
@@ -1743,6 +2094,24 @@ ${targets.map((target, index) => {
               )}
             </button>
             <span className="text-xs text-gray-400">※ LOADでプロットは自動クリア。正答は画面に表示しません（照合/オーバーレイ用）。</span>
+            {currentCaseInfo && currentCaseInfo.artConfig && (
+              <button
+                onClick={() => setShowStapedialReflex(true)}
+                className="px-3 py-2 rounded-xl text-white text-sm bg-purple-600 hover:bg-purple-700 flex items-center gap-2"
+                title="あぶみ骨筋反射（ART）検査を表示"
+              >
+                ART検査を見る
+              </button>
+            )}
+            {currentCaseInfo && currentCaseInfo.dpoaeConfig && (
+              <button
+                onClick={() => setShowDPOAE(true)}
+                className="px-3 py-2 rounded-xl text-white text-sm bg-orange-600 hover:bg-orange-700 flex items-center gap-2"
+                title="DPOAE検査を表示"
+              >
+                DPOAE検査を見る
+              </button>
+            )}
           </div>
         </div>
 
@@ -2348,6 +2717,8 @@ ${targets.map((target, index) => {
             </div>
           </div>
         </div>
+
+        
         {/* Toasts */}
         {(presetToast || randomToast) && (
           <div className="fixed right-4 bottom-4 z-50 space-y-2">
