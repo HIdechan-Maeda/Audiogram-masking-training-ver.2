@@ -22,6 +22,9 @@ export default function TympanogramGif({
   const [status, setStatus] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const animationRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const oscillatorRef = useRef(null);
+  const gainNodeRef = useRef(null);
 
   // スケール変換
   function xToPx(x) {
@@ -153,12 +156,67 @@ export default function TympanogramGif({
     drawFrame(ctx, 0);
   }, [width, height, xMin, xMax, yMin, yMax, tympanogramData]);
 
+  // 226 Hzの音を再生する関数
+  function play226HzTone() {
+    try {
+      // AudioContextを初期化（既に存在する場合は再利用）
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const audioContext = audioContextRef.current;
+      
+      // 既に再生中の場合は停止
+      if (oscillatorRef.current) {
+        oscillatorRef.current.stop();
+        oscillatorRef.current = null;
+      }
+      
+      // Oscillator（音源）を作成
+      const oscillator = audioContext.createOscillator();
+      oscillator.type = 'sine'; // サイン波
+      oscillator.frequency.setValueAtTime(226, audioContext.currentTime); // 226 Hz
+      
+      // GainNode（音量調整）を作成
+      const gainNode = audioContext.createGain();
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime); // 音量を30%に設定（大きすぎないように）
+      
+      // 接続
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // 再生
+      oscillator.start();
+      oscillatorRef.current = oscillator;
+      
+      // アニメーション終了時に停止
+      setTimeout(() => {
+        if (oscillatorRef.current) {
+          oscillatorRef.current.stop();
+          oscillatorRef.current = null;
+        }
+      }, durationMs);
+    } catch (error) {
+      console.warn('音声再生に失敗しました（ユーザー操作が必要な場合があります）:', error);
+    }
+  }
+
+  // 音を停止する関数
+  function stop226HzTone() {
+    if (oscillatorRef.current) {
+      oscillatorRef.current.stop();
+      oscillatorRef.current = null;
+    }
+  }
+
   // アニメーション再生
   function playAnimation() {
     setIsPlaying(true);
     const c = canvasRef.current;
     if (!c) return;
     const ctx = c.getContext('2d');
+    
+    // 226 Hzの音を再生開始
+    play226HzTone();
     
     let startTime = null;
     const animate = (timestamp) => {
@@ -172,6 +230,7 @@ export default function TympanogramGif({
         animationRef.current = requestAnimationFrame(animate);
       } else {
         setIsPlaying(false);
+        stop226HzTone(); // アニメーション終了時に音を停止
       }
     };
     
@@ -183,6 +242,11 @@ export default function TympanogramGif({
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
+      }
+      stop226HzTone(); // コンポーネントがアンマウントされる時に音を停止
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
       }
     };
   }, []);
