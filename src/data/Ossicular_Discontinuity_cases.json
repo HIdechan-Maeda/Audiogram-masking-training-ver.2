@@ -1,0 +1,542 @@
+[
+  {
+    "caseId": 1,
+    "chiefComplaint": "片耳の聞こえにくさ",
+    "hpi": "外傷後より片耳の伝音難聴を自覚、耳痛なし。",
+    "otoscopy": "鼓膜は正常色調・光錐あり、明らかな穿孔なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 40,
+      "500": 45,
+      "1000": 50,
+      "2000": 50,
+      "4000": 45,
+      "8000": 40
+    },
+    "bc_all": 10,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 2,
+    "chiefComplaint": "噛むと響く感じ",
+    "hpi": "耳外傷歴の後に残存する聴力低下。",
+    "otoscopy": "鼓膜正常、ツチ骨柄偏位",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 35,
+      "500": 40,
+      "1000": 45,
+      "2000": 45,
+      "4000": 40,
+      "8000": 35
+    },
+    "bc_all": 10,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 3,
+    "chiefComplaint": "自分の声が響く（自声強聴）",
+    "hpi": "中耳炎治癒後に難聴が残存。",
+    "otoscopy": "鼓膜軽度陥凹、滲出液なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 30,
+      "500": 35,
+      "1000": 40,
+      "2000": 45,
+      "4000": 45,
+      "8000": 40
+    },
+    "bc_all": 10,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 4,
+    "chiefComplaint": "耳が抜けた感じがとれない",
+    "hpi": "耳介牽引後より症状出現。",
+    "otoscopy": "鼓膜正常、耳小骨の連鎖不全が示唆される",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 35,
+      "500": 40,
+      "1000": 45,
+      "2000": 45,
+      "4000": 40,
+      "8000": 35
+    },
+    "bc_all": 10,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 5,
+    "chiefComplaint": "片側の会話音が遠い",
+    "hpi": "慢性中耳炎既往。痛みはない。",
+    "otoscopy": "鼓膜肥厚・瘢痕、陥凹",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 40,
+      "500": 45,
+      "1000": 50,
+      "2000": 55,
+      "4000": 50,
+      "8000": 45
+    },
+    "bc_all": 10,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 6,
+    "chiefComplaint": "高音が特に聞きにくい",
+    "hpi": "外傷歴はないが緩徐進行の伝音難聴。",
+    "otoscopy": "鼓膜所見は正常",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 30,
+      "500": 35,
+      "1000": 40,
+      "2000": 45,
+      "4000": 45,
+      "8000": 40
+    },
+    "bc_all": 10,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 7,
+    "chiefComplaint": "風呂上がりから聞こえが戻らない",
+    "hpi": "症状は持続し、耳痛や耳漏はない。",
+    "otoscopy": "鼓膜正常、可動性過大",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 35,
+      "500": 40,
+      "1000": 45,
+      "2000": 45,
+      "4000": 40,
+      "8000": 35
+    },
+    "bc_all": 10,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 8,
+    "chiefComplaint": "音が小さくこもって聞こえる",
+    "hpi": "アブミ・キヌタ関節離断疑い症例。",
+    "otoscopy": "鼓膜は正常",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 40,
+      "500": 45,
+      "1000": 50,
+      "2000": 50,
+      "4000": 45,
+      "8000": 40
+    },
+    "bc_all": 10,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 9,
+    "chiefComplaint": "片耳だけ明らかに聞きづらい",
+    "hpi": "交通事故後、耳痛は消失したが聴力低下が持続。",
+    "otoscopy": "鼓膜正常、耳小骨柄の動き制限",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 45,
+      "500": 50,
+      "1000": 55,
+      "2000": 55,
+      "4000": 50,
+      "8000": 45
+    },
+    "bc_all": 10,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 10,
+    "chiefComplaint": "補聴器を勧められたが症状を理解したい",
+    "hpi": "慢性中耳炎治癒後の聴力残存。",
+    "otoscopy": "鼓膜瘢痕化、アテレクタシス軽度",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 35,
+      "500": 40,
+      "1000": 45,
+      "2000": 50,
+      "4000": 45,
+      "8000": 40
+    },
+    "bc_all": 10,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 11,
+    "chiefComplaint": "片耳の聞こえが急に悪くなった",
+    "hpi": "外傷後から持続する片側の伝音性難聴。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 15,
+      "500": 15,
+      "1000": 5,
+      "2000": 20,
+      "4000": 20,
+      "8000": 5
+    },
+    "bc_all": 20,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 12,
+    "chiefComplaint": "片耳の聞こえが急に悪くなった",
+    "hpi": "外傷後から持続する片側の伝音性難聴。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 35,
+      "500": 45,
+      "1000": 40,
+      "2000": 40,
+      "4000": 45,
+      "8000": 40
+    },
+    "bc_all": 23,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 13,
+    "chiefComplaint": "外傷後から片耳がこもる",
+    "hpi": "中耳炎治癒後も片側の聞こえが戻らない。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "A",
+    "ac": {
+      "250": 10,
+      "500": 20,
+      "1000": 20,
+      "2000": 10,
+      "4000": 5,
+      "8000": 10
+    },
+    "bc_all": 13,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 14,
+    "chiefComplaint": "外傷後から片耳がこもる",
+    "hpi": "中耳炎治癒後も片側の聞こえが戻らない。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 50,
+      "500": 35,
+      "1000": 45,
+      "2000": 35,
+      "4000": 30,
+      "8000": 30
+    },
+    "bc_all": 28,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 15,
+    "chiefComplaint": "片耳だけ極端に聞こえない",
+    "hpi": "突然発症し、その後も改善しない。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 45,
+      "500": 45,
+      "1000": 40,
+      "2000": 30,
+      "4000": 40,
+      "8000": 40
+    },
+    "bc_all": 25,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 16,
+    "chiefComplaint": "片耳だけ極端に聞こえない",
+    "hpi": "突然発症し、その後も改善しない。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 15,
+      "500": 5,
+      "1000": 15,
+      "2000": 10,
+      "4000": 15,
+      "8000": 0
+    },
+    "bc_all": 15,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 17,
+    "chiefComplaint": "音が小さく遠くに聞こえる（片側）",
+    "hpi": "術後から片側の聞き取りが落ちた。",
+    "otoscopy": "鼓膜に白色斑状の瘢痕を認める",
+    "tympanogram": "A",
+    "ac": {
+      "250": 25,
+      "500": 25,
+      "1000": 25,
+      "2000": 10,
+      "4000": 35,
+      "8000": 25
+    },
+    "bc_all": 23,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 18,
+    "chiefComplaint": "音が小さく遠くに聞こえる（片側）",
+    "hpi": "術後から片側の聞き取りが落ちた。",
+    "otoscopy": "鼓膜に白色斑状の瘢痕を認める",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 35,
+      "500": 35,
+      "1000": 40,
+      "2000": 50,
+      "4000": 35,
+      "8000": 40
+    },
+    "bc_all": 15,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 19,
+    "chiefComplaint": "片耳の聞き返しが増えた",
+    "hpi": "強く耳を引いた後から違和感と難聴。",
+    "otoscopy": "鼓膜がやや菲薄で光沢が強い印象",
+    "tympanogram": "A",
+    "ac": {
+      "250": 5,
+      "500": 20,
+      "1000": 10,
+      "2000": 20,
+      "4000": 15,
+      "8000": 20
+    },
+    "bc_all": 18,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 20,
+    "chiefComplaint": "片耳の聞き返しが増えた",
+    "hpi": "強く耳を引いた後から違和感と難聴。",
+    "otoscopy": "鼓膜がやや菲薄で光沢が強い印象",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 35,
+      "500": 40,
+      "1000": 30,
+      "2000": 45,
+      "4000": 25,
+      "8000": 40
+    },
+    "bc_all": 25,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 21,
+    "chiefComplaint": "水が入ったようにこもる（片側）",
+    "hpi": "耳漏はなく痛みもないが片側が遠い。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 50,
+      "500": 40,
+      "1000": 40,
+      "2000": 50,
+      "4000": 45,
+      "8000": 25
+    },
+    "bc_all": 20,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 22,
+    "chiefComplaint": "水が入ったようにこもる（片側）",
+    "hpi": "耳漏はなく痛みもないが片側が遠い。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 5,
+      "500": 20,
+      "1000": 20,
+      "2000": 25,
+      "4000": 10,
+      "8000": 0
+    },
+    "bc_all": 15,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 23,
+    "chiefComplaint": "片耳が空洞に響く感じ",
+    "hpi": "交通事故後から片耳だけ極端に不良。",
+    "otoscopy": "鼓膜に白色斑状の瘢痕を認める",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 45,
+      "500": 40,
+      "1000": 45,
+      "2000": 40,
+      "4000": 45,
+      "8000": 40
+    },
+    "bc_all": 20,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 24,
+    "chiefComplaint": "片耳が空洞に響く感じ",
+    "hpi": "交通事故後から片耳だけ極端に不良。",
+    "otoscopy": "鼓膜に白色斑状の瘢痕を認める",
+    "tympanogram": "A",
+    "ac": {
+      "250": 10,
+      "500": 5,
+      "1000": 15,
+      "2000": 20,
+      "4000": 10,
+      "8000": 15
+    },
+    "bc_all": 15,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 25,
+    "chiefComplaint": "外傷後に片耳の会話が遠い",
+    "hpi": "水泳後に悪化、以降戻らず。",
+    "otoscopy": "鼓膜がやや菲薄で光沢が強い印象",
+    "tympanogram": "A",
+    "ac": {
+      "250": 10,
+      "500": 25,
+      "1000": 15,
+      "2000": 25,
+      "4000": 35,
+      "8000": 35
+    },
+    "bc_all": 18,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 26,
+    "chiefComplaint": "外傷後に片耳の会話が遠い",
+    "hpi": "水泳後に悪化、以降戻らず。",
+    "otoscopy": "鼓膜がやや菲薄で光沢が強い印象",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 30,
+      "500": 30,
+      "1000": 40,
+      "2000": 50,
+      "4000": 35,
+      "8000": 30
+    },
+    "bc_all": 23,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 27,
+    "chiefComplaint": "耳小骨手術後から片耳が悪い",
+    "hpi": "外傷歴は不明だが片側のみ持続。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 40,
+      "500": 40,
+      "1000": 35,
+      "2000": 35,
+      "4000": 30,
+      "8000": 40
+    },
+    "bc_all": 18,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 28,
+    "chiefComplaint": "耳小骨手術後から片耳が悪い",
+    "hpi": "外傷歴は不明だが片側のみ持続。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 20,
+      "500": 25,
+      "1000": 10,
+      "2000": 20,
+      "4000": 30,
+      "8000": 25
+    },
+    "bc_all": 15,
+    "unilateral": true,
+    "affectedSide": "right"
+  },
+  {
+    "caseId": 29,
+    "chiefComplaint": "片側の聞こえの悪化が持続",
+    "hpi": "職場で片側の聞き返しが増えた。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 30,
+      "500": 50,
+      "1000": 35,
+      "2000": 35,
+      "4000": 35,
+      "8000": 25
+    },
+    "bc_all": 28,
+    "unilateral": true,
+    "affectedSide": "left"
+  },
+  {
+    "caseId": 30,
+    "chiefComplaint": "片側の聞こえの悪化が持続",
+    "hpi": "職場で片側の聞き返しが増えた。",
+    "otoscopy": "鼓膜正常、特記すべき変化なし",
+    "tympanogram": "Ad",
+    "ac": {
+      "250": 20,
+      "500": 10,
+      "1000": 15,
+      "2000": 20,
+      "4000": 25,
+      "8000": 25
+    },
+    "bc_all": 18,
+    "unilateral": true,
+    "affectedSide": "right"
+  }
+]
