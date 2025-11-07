@@ -33,10 +33,27 @@ export default function TympanogramGif({
   }
   function yToPx(y) {
     const padT = 30, padB = 50;
-    // 上が大きいmL（2.0）、下が0
-    const t = padT + (yMax - Math.max(yMin, Math.min(yMax, y))) * (height - padT - padB) / (yMax - yMin);
+    // 上が大きいmL、下が0
+    const clampedY = Math.max(yMin, Math.min(effectiveYMax, y));
+    const t = padT + (effectiveYMax - clampedY) * (height - padT - padB) / (effectiveYMax - yMin || 1);
     return t;
   }
+
+  const effectiveYMax = (() => {
+    if (!tympanogramData) return yMax;
+    const gather = [];
+    const pushVals = (ear) => {
+      if (!ear) return;
+      if (typeof ear.peakCompliance === 'number') gather.push(ear.peakCompliance);
+    };
+    pushVals(tympanogramData.left);
+    pushVals(tympanogramData.right);
+    const maxCompliance = gather.length ? Math.max(...gather) : yMax;
+    if (maxCompliance > yMax) {
+      return 5.0;
+    }
+    return yMax;
+  })();
 
   function drawFrame(ctx, progress01) {
     // 背景
@@ -52,7 +69,7 @@ export default function TympanogramGif({
       ctx.moveTo(x, yToPx(yMin));
       ctx.lineTo(x, yToPx(yMax));
     }
-    for (let c = yMin; c <= yMax + 1e-6; c += 0.2) {
+    for (let c = yMin; c <= effectiveYMax + 1e-6; c += 0.2) {
       const y = yToPx(c);
       ctx.moveTo(xToPx(xMin), y);
       ctx.lineTo(xToPx(xMax), y);
@@ -70,7 +87,7 @@ export default function TympanogramGif({
     // Y軸
     ctx.beginPath();
     ctx.moveTo(xToPx(0), yToPx(yMin));
-    ctx.lineTo(xToPx(0), yToPx(yMax));
+    ctx.lineTo(xToPx(0), yToPx(effectiveYMax));
     ctx.stroke();
 
     // 目盛・ラベル
@@ -82,13 +99,13 @@ export default function TympanogramGif({
       ctx.fillText(`${p}`, x, yToPx(0) + 18);
     }
     ctx.save();
-    ctx.translate(18, (yToPx(yMax) + yToPx(yMin)) / 2);
+    ctx.translate(18, (yToPx(effectiveYMax) + yToPx(yMin)) / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.textAlign = 'center';
     ctx.fillText('Compliance (mL)', 0, 0);
     ctx.restore();
     ctx.textAlign = 'right';
-    for (let c = yMin; c <= yMax + 1e-6; c += 0.5) {
+    for (let c = yMin; c <= effectiveYMax + 1e-6; c += 0.5) {
       const y = yToPx(c);
       ctx.fillText(`${c.toFixed(1)}`, xToPx(xMin) - 6, y + 4);
     }
@@ -112,7 +129,7 @@ export default function TympanogramGif({
       for (let i = 0; i <= showUntil; i++) {
         const t = i / steps;
         const x = xMax - t * (xMax - xMin); // 右から左へ
-        const y = getCompliance(x, leftData, tympanogramData.type);
+        const y = getCompliance(x, leftData, tympanogramData.type, effectiveYMax);
         const px = xToPx(x);
         const py = yToPx(y);
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
@@ -127,7 +144,7 @@ export default function TympanogramGif({
       for (let i = 0; i <= showUntil; i++) {
         const t = i / steps;
         const x = xMax - t * (xMax - xMin); // 右から左へ
-        const y = getCompliance(x, rightData, tympanogramData.type);
+        const y = getCompliance(x, rightData, tympanogramData.type, effectiveYMax);
         const px = xToPx(x);
         const py = yToPx(y);
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
@@ -136,7 +153,7 @@ export default function TympanogramGif({
     }
   }
 
-  function getCompliance(x, data, type) {
+  function getCompliance(x, data, type, maxY) {
     // A型：peakPressure=0
     // B型：peakPressure=-200
     // C型：peakPressure=-100
@@ -145,7 +162,7 @@ export default function TympanogramGif({
     const A = data.peakCompliance;
     const s = data.sigma;
     const v = A * Math.exp(-Math.pow(x - mu, 2) / (2 * s * s));
-    return Math.max(yMin, Math.min(yMax, v));
+    return Math.max(yMin, Math.min(maxY, v));
   }
 
   useEffect(() => {
@@ -154,7 +171,7 @@ export default function TympanogramGif({
     if (!c) return;
     const ctx = c.getContext('2d');
     drawFrame(ctx, 0);
-  }, [width, height, xMin, xMax, yMin, yMax, tympanogramData]);
+  }, [width, height, xMin, xMax, yMin, tympanogramData, effectiveYMax]);
 
   // 226 Hzの音を再生する関数
   function play226HzTone() {

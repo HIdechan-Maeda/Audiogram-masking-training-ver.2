@@ -5,6 +5,18 @@ const FREQS = ["0.125kHz", "0.25kHz", "0.5kHz", "1kHz", "2kHz", "4kHz", "8kHz"];
 const AGE_GROUPS = ["20s", "30s", "40s", "50s", "60s", "70s"];
 const SEXES = ["Male", "Female"];
 const PROFILES = ["Normal", "SNHL_Age", "SNHL_NoiseNotch", "SNHL_Meniere", "SNHL_Sudden", "SNHL_Mumps", "CHL_OME", "CHL_AOM", "CHL_Otosclerosis", "CHL_OssicularDiscontinuity"];
+const PROFILE_WEIGHTS = {
+  Normal: 2,
+  SNHL_Age: 2,
+  SNHL_NoiseNotch: 2,
+  SNHL_Meniere: 2,
+  SNHL_Sudden: 2,
+  SNHL_Mumps: 2,
+  CHL_OME: 3,
+  CHL_AOM: 3,
+  CHL_Otosclerosis: 1,
+  CHL_OssicularDiscontinuity: 12,
+};
 
 const FREQ_NUM = { "0.125kHz": 0.125, "0.25kHz": 0.25, "0.5kHz": 0.5, "1kHz": 1, "2kHz": 2, "4kHz": 4, "8kHz": 8 };
 const LIMITS_AC = {
@@ -79,7 +91,7 @@ function generateEarBase(rand, sex, age) {
     if (isBCFreq(f)) {
       // 正常耳の骨導はほぼ中央値付近
       const lim = LIMITS_BC[f];
-      const bcRaw = b.median + (rand() - 0.5) * 3.0; // ±1.5dB程度
+      const bcRaw = b.median + (rand() - 0.5) * 12.0; // ±6dB程度の揺らぎ
       bc = roundTo5(clamp(bcRaw, lim.min, lim.max));
     }
     return { freq: f, median: b.median, minus2SD: b.minus2SD, plus2SD: b.plus2SD, ac, bc, soAC: false, soBC: false };
@@ -108,7 +120,7 @@ function makeContralateralNormal(rand, sex, age) {
 
 // 左右相関をつけて左耳を生成（ρ≈0.7）
 function correlateLeft(rand, rightRows, sex, age) {
-  const rho = 0.7;
+  const rho = 0.55;
   return rightRows.map((rr, i) => {
     const b = getBand(sex, age, rr.freq);
     const sd = (b.plus2SD - b.median) / 2;
@@ -118,7 +130,7 @@ function correlateLeft(rand, rightRows, sex, age) {
     let bc = rr.bc;
     if (isBCFreq(rr.freq) && typeof bc === 'number') {
       const lim = LIMITS_BC[rr.freq];
-      const bcRaw = b.median + rho * (bc - b.median) + (rand() - 0.5) * 2.0;
+      const bcRaw = b.median + rho * (bc - b.median) + (rand() - 0.5) * 12.0;
       bc = roundTo5(clamp(bcRaw, lim.min, lim.max));
     }
     return { ...rr, ac, bc, soAC: false, soBC: false };
@@ -177,7 +189,7 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
       if (isBCFreq(r.freq)) {
         const lim = LIMITS_BC[r.freq];
         const band = getBand(sexForBands, ageForBands, r.freq);
-        let bcRaw = (band.median ?? 0) + (rand() - 0.5) * 3.0; // ±1.5dB程度
+        let bcRaw = (band.median ?? 0) + (rand() - 0.5) * 12.0; // ±6dB程度
         // 耳硬化症: Carhartノッチ（2k中心、1k/4kに弱く波及）
         if (profile === 'CHL_Otosclerosis') {
           const wBC = { "1kHz": 0.3, "2kHz": 1.0, "4kHz": 0.2 }[r.freq] || 0;
@@ -189,7 +201,7 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
     } else {
       if (isBCFreq(r.freq) && typeof (r.bc) === 'number') {
         const lim = LIMITS_BC[r.freq];
-        const jitter = (rand() - 0.5) * 6;
+        const jitter = (rand() - 0.5) * 12;
         bc = roundTo5(clamp(ac + jitter, lim.min, lim.max));
       }
     }
@@ -227,6 +239,15 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
 }
 
 function randomPick(rand, arr) { return arr[Math.floor(rand() * arr.length)]; }
+function weightedRandomPick(rand, items) {
+  let total = 0;
+  const cumulative = items.map(item => {
+    total += item.weight;
+    return { value: item.value, cumulative: total };
+  });
+  const r = rand() * total;
+  return cumulative.find(item => r < item.cumulative)?.value || items[items.length - 1].value;
+}
 
 export function generateAudiogram(opts = {}) {
   const seed = (opts.seed != null ? opts.seed : Math.floor(Math.random() * 1e9)) >>> 0;
@@ -238,7 +259,10 @@ export function generateAudiogram(opts = {}) {
 
   // 一側性のSNHL系は重症度0（なし）を避けて最低1に補正（表示上の無変化を防止）
   const unilateralProfiles = new Set(['SNHL_Sudden', 'SNHL_Meniere', 'SNHL_Mumps', 'CHL_OssicularDiscontinuity']);
-  if (unilateralProfiles.has(profile) && profile.startsWith('SNHL_') && severity === 0) {
+  const forcedUnilateralAOM = profile === 'CHL_AOM' && rand() < 0.8;
+  const isUnilateralProfile = unilateralProfiles.has(profile) || forcedUnilateralAOM;
+
+  if (isUnilateralProfile && profile.startsWith('SNHL_') && severity === 0) {
     severity = 1;
   }
 
@@ -247,9 +271,11 @@ export function generateAudiogram(opts = {}) {
   right = applyProfileTransform(rand, right, profile, severity, seed, sex, ageGroup);
 
   let left;
-  if (unilateralProfiles.has(profile)) {
+  let affectedSide = null;
+
+  if (isUnilateralProfile) {
     const affectedRight = opts.affectedSide ? (opts.affectedSide === 'R') : (rand() < 0.5);
-    var affectedSide = affectedRight ? 'R' : 'L';
+    affectedSide = affectedRight ? 'R' : 'L';
     if (affectedRight) {
       // 左はNormal（同sex/age）
       left = makeContralateralNormal(rand, sex, ageGroup);
@@ -290,8 +316,16 @@ export function generateAudiogram(opts = {}) {
   } else {
     // 両側同時生成（相関あり）
     left = correlateLeft(rand, right, sex, ageGroup);
-    var affectedSide = null;
   }
+
+  right = applyBcRandomJitter(rand, right);
+  left = applyBcRandomJitter(rand, left);
+
+  const baseRightProfile = (isUnilateralProfile && affectedSide === 'L') ? 'Normal' : profile;
+  const baseLeftProfile = (isUnilateralProfile && affectedSide === 'R') ? 'Normal' : profile;
+
+  right = enforceBcRules(right, baseRightProfile);
+  left = enforceBcRules(left, baseLeftProfile);
 
   // 最終: soAC判定（ACが機器上限超ならNR）
   const finalizeSo = (rows) => rows.map(r => {
@@ -331,8 +365,8 @@ export function generateAudiogram(opts = {}) {
   left = applyBcEdgeInternal(left, profile);
 
   // 耳ごとの最終プロファイル（答え合わせ用）
-  let rightProfile = (unilateralProfiles.has(profile) && affectedSide === 'L') ? 'Normal' : profile;
-  let leftProfile  = (unilateralProfiles.has(profile) && affectedSide === 'R') ? 'Normal' : profile;
+  let rightProfile = baseRightProfile;
+  let leftProfile  = baseLeftProfile;
 
   // WHO基準の4分法PTA（(0.5k + 2*1k + 2k)/4）で正常判定（<=25 dB）の場合、
   // 20s/30s かつ SNHL_Age のときは「答え合わせ」を Normal に補正
@@ -351,12 +385,78 @@ export function generateAudiogram(opts = {}) {
   }
 
   return {
-    meta: { seed, sex, ageGroup, profile, severity, affectedSide, rightProfile, leftProfile },
+    meta: { seed, sex, ageGroup, profile, severity, affectedSide, rightProfile, leftProfile, forcedUnilateralAOM },
     right,
     left,
   };
 }
 
 export const EngineConstants = { FREQS, AGE_GROUPS, SEXES, PROFILES };
+
+function applyBcRandomJitter(rand, rows, options = {}) {
+  const { stepOptions = [-10, -5, 0, 5, 10] } = options;
+  return rows.map(r => {
+    if (!isBCFreq(r.freq) || typeof r.bc !== 'number') return r;
+    const lim = LIMITS_BC[r.freq];
+    const step = stepOptions[Math.floor(rand() * stepOptions.length)] || 0;
+    const jittered = roundTo5(clamp(r.bc + step, lim.min, lim.max));
+    return { ...r, bc: jittered };
+  });
+}
+
+const CONDUCTIVE_PROFILES = new Set(['CHL_OME','CHL_AOM','CHL_Otosclerosis','CHL_OssicularDiscontinuity']);
+
+function enforceBcRules(rows, earProfile) {
+  const isConductive = CONDUCTIVE_PROFILES.has(earProfile);
+  const minMaps = {
+    CHL_OME: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 8 },
+    CHL_AOM: { "0.25kHz": 15, "0.5kHz": 20, "1kHz": 15, "2kHz": 10, "4kHz": 5 },
+    CHL_Otosclerosis: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 5 },
+    CHL_OssicularDiscontinuity: { "0.25kHz": 20, "0.5kHz": 25, "1kHz": 25, "2kHz": 20, "4kHz": 15, "8kHz": 10 },
+  };
+  return rows.map(r => {
+    if (!isBCFreq(r.freq) || typeof r.bc !== 'number') return r;
+    const lim = LIMITS_BC[r.freq];
+    let bc = roundTo5(clamp(r.bc, lim.min, lim.max));
+    let ac = r.ac;
+    if (typeof ac === 'number') {
+      // ABGは最大40dBまで（伝音性）
+      const maxGap = 40;
+      if (isConductive && ac - bc > maxGap) {
+        const adjustedAc = clamp(bc + maxGap, LIMITS_AC[r.freq].min, LIMITS_AC[r.freq].max);
+        ac = roundTo5(adjustedAc);
+      }
+      const maxAllowed = Math.min(lim.max, ac + 5);
+      bc = roundTo5(clamp(bc, lim.min, maxAllowed));
+      // 正常・感音性：BCがACより10dB以上良くならない
+      if (!isConductive) {
+        const minAllowed = ac - 10;
+        bc = roundTo5(clamp(bc, Math.max(lim.min, minAllowed), maxAllowed));
+      }
+    }
+    if (isConductive && typeof ac === 'number') {
+      const minMap = minMaps[earProfile];
+      const minABG = minMap ? (minMap[r.freq] ?? 0) : 0;
+      if (minABG > 0) {
+        const gap = ac - bc;
+        if (gap < minABG) {
+          const adjustedAc = clamp(ac + (minABG - gap), LIMITS_AC[r.freq].min, LIMITS_AC[r.freq].max);
+          ac = roundTo5(adjustedAc);
+        }
+      }
+    }
+    if (typeof ac === 'number') {
+      // ABGは最大40dBまで
+      const maxGap = 40;
+      if (ac - bc > maxGap) {
+        const adjustedAc = clamp(bc + maxGap, LIMITS_AC[r.freq].min, LIMITS_AC[r.freq].max);
+        ac = roundTo5(adjustedAc);
+      }
+      const maxAllowed = Math.min(lim.max, ac + 5);
+      bc = roundTo5(clamp(bc, lim.min, maxAllowed));
+    }
+    return { ...r, ac, bc };
+  });
+}
 
 

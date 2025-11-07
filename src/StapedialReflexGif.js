@@ -41,7 +41,8 @@ export default function StapedialReflexGif({
 
   // 反射閾値計算関数：BC値とティンパノグラム型を考慮
   const calculateThreshold = (freq, isIpsi, isLeft) => {
-    const normalThresh = isIpsi ? NORMAL_THRESHOLDS[freq].ipsi : NORMAL_THRESHOLDS[freq].cont;
+    const normal = NORMAL_THRESHOLDS[freq] || NORMAL_THRESHOLDS[1000];
+    const normalThresh = isIpsi ? (normal?.ipsi ?? 80) : (normal?.cont ?? 85);
     
     // 測定側と刺激側の耳を特定（反射弓）
     // Rt測定: IPSI=右耳刺激、CONT=左耳刺激
@@ -52,6 +53,17 @@ export default function StapedialReflexGif({
     const stimulusConfig = stimulusEar === 'right' ? HEARING_CONFIG.right : HEARING_CONFIG.left;
     const measuredConfig = measuredEar === 'right' ? HEARING_CONFIG.right : HEARING_CONFIG.left;
     
+    const overrideKey = isIpsi ? 'ipsilateralOverride' : 'contralateralOverride';
+    const overrideMeasured = measuredConfig?.[overrideKey]?.[freq];
+    if (overrideMeasured !== undefined) {
+      return overrideMeasured;
+    }
+
+    const overrideStimulus = stimulusConfig?.[overrideKey]?.[freq];
+    if (overrideStimulus !== undefined) {
+      return overrideStimulus;
+    }
+
     // 伝音障害の判定：ティンパノグラムB型は伝音障害を示す
     // 測定側が伝音障害（B型）なら反射消失
     if (measuredConfig.tympanogramType === 'B') {

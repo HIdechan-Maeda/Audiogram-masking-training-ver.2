@@ -35,6 +35,33 @@ const CHART_MARGIN = { top: AXIS_TOP, right: AXIS_RIGHT, bottom: AXIS_BOTTOM, le
 // Interaural Attenuation (IA): AC=50 dB, BC=0 dB
 const IA = { AC: 50, BC: 0 };
 
+const PROFILE_PATTERN_MAP = {
+  Normal: 'normal',
+  NormalHearing: 'normal',
+  SNHL_Age: 'sensorineural',
+  SNHL_NoiseNotch: 'sensorineural',
+  SNHL_Meniere: 'sensorineural',
+  SNHL_Sudden: 'sensorineural',
+  SNHL_Mumps: 'sensorineural',
+  SNHL_Other: 'sensorineural',
+  CHL_OME: 'conductive',
+  CHL_AOM: 'conductive',
+  CHL_Otosclerosis: 'conductive',
+  CHL_OssicularDiscontinuity: 'conductive',
+};
+
+function inferCasePatternFromProfile(profileName) {
+  if (!profileName || typeof profileName !== 'string') {
+    return 'sensorineural';
+  }
+  const key = profileName.trim();
+  if (PROFILE_PATTERN_MAP[key]) return PROFILE_PATTERN_MAP[key];
+  if (/^SNHL_/i.test(key)) return 'sensorineural';
+  if (/^CHL_/i.test(key)) return 'conductive';
+  if (/^Normal/i.test(key)) return 'normal';
+  return 'sensorineural';
+}
+
 // ISO 7029: 正常聴力閾値の疫学データ（年齢別・周波数別）
 // 単位: dB HL, 周波数: 1000, 2000, 4000 Hz
 const NORMAL_HEARING_THRESHOLDS_ISO7029 = {
@@ -222,7 +249,7 @@ const HEARING_DISORDERS = [
     genderBias: 0.5,
     pattern: "ome",
     episodes: [
-      "上気道炎後より聴力低下を自覚、耳痛なし",
+      "上気道炎後より聞こえ低下を自覚、耳痛なし",
       "鼻閉継続、耳閉感、痛みなし",
       "感冒後から耳閉塞感と難聴",
       "アレルギー性鼻炎背景、徐々に悪化",
@@ -385,7 +412,6 @@ const PRESET_H = preset('症例H', [
   mk('L','AC', [[125,35],[250,40],[500,40],[1000,50],[2000,45],[4000,40],[8000,50]]),
   mk('L','BC', [[250,10],[500,15],[1000,20],[2000,25],[4000,20]])
 ]);
-
 // 症例の詳細情報
 const PRESET_DETAILS = {
   A: {
@@ -485,9 +511,14 @@ const PRESET_DETAILS = {
     }
   }
 };
-
 // ART設定を構築する関数（プリセットのAC/BC値とティンパノグラム型から）
-function buildArtConfig(presetTargets, tympanogram, disorderName = null, casePattern = null) {
+function buildArtConfig(presetTargets, tympanogram, disorderName = null, casePattern = null, meta = {}) {
+  const ART_NORMAL_THRESHOLDS = {
+    500: { ipsi: 80, cont: 85 },
+    1000: { ipsi: 75, cont: 80 },
+    2000: { ipsi: 80, cont: 85 }
+  };
+
   const acThresholds = { right: {}, left: {} };
   const bcThresholds = { right: {}, left: {} };
   
@@ -535,13 +566,13 @@ function buildArtConfig(presetTargets, tympanogram, disorderName = null, casePat
       return 'B'; // 耳硬化症のAs型は反射消失のため、B型として扱う
     }
     // 伝音性難聴でAs型の場合も反射消失（耳硬化症以外でも可能性あり）
-    if ((casePattern === 'conductive' || casePattern === 'mixed') && type === 'As') {
+    if (casePattern === 'conductive' && type === 'As') {
       return 'B'; // As型で伝音性難聴は反射消失
     }
     return type;
   };
   
-  return {
+  const artConfig = {
     right: {
       acThresholds: acThresholds.right,
       bcThresholds: bcThresholds.right,
@@ -555,8 +586,117 @@ function buildArtConfig(presetTargets, tympanogram, disorderName = null, casePat
       peakPressure: tympanogram?.left?.peakPressure || 0
     }
   };
-}
 
+  const profiles = {
+    right: meta?.rightProfile || meta?.profile || null,
+    left: meta?.leftProfile || meta?.profile || null
+  };
+  const isOssicular = disorderName === 'CHL_OssicularDiscontinuity'
+    || disorderName === '耳小骨離断'
+    || profiles.right === 'CHL_OssicularDiscontinuity'
+    || profiles.left === 'CHL_OssicularDiscontinuity';
+
+  if (isOssicular) {
+    let affectedSide = meta?.affectedSide || null;
+    if (!affectedSide) {
+      if (profiles.right === 'CHL_OssicularDiscontinuity' && profiles.left !== 'CHL_OssicularDiscontinuity') {
+        affectedSide = 'R';
+      } else if (profiles.left === 'CHL_OssicularDiscontinuity' && profiles.right !== 'CHL_OssicularDiscontinuity') {
+        affectedSide = 'L';
+      }
+    }
+
+    const freqs = [500, 1000, 2000];
+    const elevation = 15;
+
+    const ensureOverride = (earKey, key) => {
+      if (!artConfig[earKey][key]) artConfig[earKey][key] = {};
+      return artConfig[earKey][key];
+    };
+
+    const markAbsent = (earKey) => {
+      freqs.forEach(freq => {
+        ensureOverride(earKey, 'ipsilateralOverride')[freq] = 999;
+        ensureOverride(earKey, 'contralateralOverride')[freq] = 999;
+      });
+    };
+
+    const elevateContralateral = (earKey) => {
+      freqs.forEach(freq => {
+        const base = ART_NORMAL_THRESHOLDS[freq]?.cont ?? 85;
+        ensureOverride(earKey, 'contralateralOverride')[freq] = base + elevation;
+      });
+    };
+
+    if (affectedSide === 'R') {
+      markAbsent('right');
+      elevateContralateral('left');
+    } else if (affectedSide === 'L') {
+      markAbsent('left');
+      elevateContralateral('right');
+    } else {
+      // 影響側が不明な場合は両側を安全側にする
+      markAbsent('right');
+      markAbsent('left');
+    }
+  }
+
+  return artConfig;
+}
+function buildSimpleTympanogramFromProfile(profileName, meta = {}) {
+  const resolvedProfile = profileName || 'Normal';
+  const rightEarProfile = meta.rightProfile || resolvedProfile;
+  const leftEarProfile = meta.leftProfile || resolvedProfile;
+
+  const createEarConfig = (earProfile) => {
+    if (!earProfile || earProfile === 'Normal' || earProfile.startsWith('SNHL_')) {
+      return { config: { peakPressure: 0, peakCompliance: 1.1, sigma: 60 }, type: 'A' };
+    }
+    if (earProfile === 'CHL_Otosclerosis') {
+      return { config: { peakPressure: 0, peakCompliance: 0.5, sigma: 60 }, type: 'As' };
+    }
+    if (earProfile === 'CHL_OssicularDiscontinuity') {
+      return { config: { peakPressure: 0, peakCompliance: 2.2, sigma: 60 }, type: 'Ad' };
+    }
+    if (earProfile === 'CHL_AOM') {
+      return { config: { peakPressure: -200, peakCompliance: 0.3, sigma: 80 }, type: 'B' };
+    }
+    if (earProfile === 'CHL_OME') {
+      return { config: { peakPressure: -150, peakCompliance: 1.0, sigma: 60 }, type: 'C' };
+    }
+    return { config: { peakPressure: 0, peakCompliance: 1.1, sigma: 60 }, type: 'A' };
+  };
+
+  let rightResult = createEarConfig(rightEarProfile);
+  let leftResult = createEarConfig(leftEarProfile);
+
+  if (resolvedProfile === 'CHL_OssicularDiscontinuity' && !meta.rightProfile && !meta.leftProfile && meta.affectedSide) {
+    if (meta.affectedSide === 'R') {
+      rightResult = createEarConfig('CHL_OssicularDiscontinuity');
+      leftResult = createEarConfig('Normal');
+    } else if (meta.affectedSide === 'L') {
+      rightResult = createEarConfig('Normal');
+      leftResult = createEarConfig('CHL_OssicularDiscontinuity');
+    }
+  }
+
+  let right = rightResult.config;
+  let left = leftResult.config;
+
+  if (right.peakCompliance === left.peakCompliance && right.peakPressure === left.peakPressure) {
+    left = {
+      ...left,
+      peakPressure: left.peakPressure - 12,
+      peakCompliance: Number(Math.max(0.2, left.peakCompliance * 1.05).toFixed(2)),
+    };
+  }
+
+  const overallType = rightResult.type === leftResult.type
+    ? rightResult.type
+    : (rightResult.type !== 'A' ? rightResult.type : leftResult.type);
+
+  return { type: overallType, right, left };
+}
 // DPOAE設定を構築する関数（プリセットのAC値とティンパノグラム型から）
 function buildDPOAEConfig(presetTargets, tympanogram) {
   // DPOAEの周波数: [1, 2, 3, 4, 6, 8] kHz
@@ -646,7 +786,6 @@ function buildDPOAEConfig(presetTargets, tympanogram) {
     tympanogramType
   };
 }
-
 // DPOAEデータを生成する関数（症例ごとに固定値）
 function generateDPOAEData(dpoaeConfig, caseId = '') {
   const frequencies = [1, 2, 3, 4, 6, 8];
@@ -815,7 +954,6 @@ function isResponse(points, t) {
 function maxPresentable(transKey, f) {
   return transKey === 'AC' ? (AC_MAX[f] ?? 110) : (BC_MAX[f] ?? 110);
 }
-
 // shape renderer (adds SO arrow if payload.so)
 function shapeRenderer(shape, color) {
   return (props) => {
@@ -903,7 +1041,6 @@ function LegendMark({ shape, color }) {
     </svg>
   );
 }
-
 export default function AudiogramMaskingMVP() {
   // 講習会用パスワード保護
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -1153,7 +1290,9 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       };
     } catch (error) {
       console.warn('OpenAI API呼び出しに失敗しました。従来の方法を使用します:', error);
-      return null; // エラー時は従来方法にフォールバック
+      setCurrentCaseInfo(null);
+      setCustomPresetDetails(null);
+      return; // エラー時は従来方法にフォールバック
     }
   };
 
@@ -1203,13 +1342,11 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       setMeasurementLog(logs);
     } catch {}
   }
-
   // AI生成: 症例の詳細情報を生成する関数（非同期版：OpenAI統合）
   const generateCaseDetails = async (generatedTargets, casePattern, generatedAge = null, patternAnalysis = null) => {
     // まず Tym 作成 → タイプ分類 → 症例検索（文面取得）
     const generateTymType = (pattern) => {
       if (pattern === 'conductive') return Math.random() < 0.7 ? 'B' : (Math.random() < 0.5 ? 'C' : 'Ad');
-      if (pattern === 'mixed') return Math.random() < 0.5 ? 'B' : (Math.random() < 0.5 ? 'As' : 'Ad');
       if (pattern === 'sensorineural') return 'A';
       return 'A';
     };
@@ -1472,7 +1609,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
         selectedDisorder = patternAnalysis.possibleDisorders[0].disorder;
         
         // 疾患に基づいてタインパノグラム型を設定（疾患情報を優先）
-        if (casePattern === 'conductive' || casePattern === 'mixed') {
+        if (casePattern === 'conductive') {
           if (selectedDisorder.name === '耳硬化症') {
             pattern.tympType = 'As'; // 耳硬化症はAs型
           } else if (selectedDisorder.name === '耳小骨離断') {
@@ -1485,7 +1622,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
         // 性別（疾患の性別バイアスを反映）
         gender = Math.random() < selectedDisorder.genderBias ? '女性' : '男性';
         if (selectedDisorder.genderBias === 0.7) {
-          gender = '女性'; // メニエール、耳硬化症は女性が多い
+          gender = '女性'; // メニエー尔病、耳硬化症は女性が多い
         } else if (selectedDisorder.genderBias === 0.3) {
           gender = '男性'; // 騒音性難聴は男性が多い
         }
@@ -1497,8 +1634,8 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
         let selectedDBCase = null;
         
         // 主訴（疾患特有の表現、データベースから参照）
-        if (disorderPattern.name === 'メニエール病') {
-          // メニエール病では高音域訴え（電話/高音が聞き取りにくい等）は使わない
+        if (disorderPattern.name === 'メニエー尔病') {
+          // メニエー尔病では高音域訴え（電話/高音が聞き取りにくい等）は使わない
           chiefComplaint = '回転性めまいと低音性耳鳴り、聞こえの変動';
           history = `${Math.floor(Math.random() * 12) + 1}ヶ月前から回転性めまい発作が反復。『ゴー』という低音性耳鳴りを自覚。発作時に低音域の聞こえが悪化し、寛解期に改善する`;
         } else if (disorderPattern.name === '突発性難聴') {
@@ -1614,19 +1751,6 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
               tympType = 'B'; // その他の伝音性難聴はB型
             }
           }
-        } else if (casePattern === 'mixed') {
-          // 混合性難聴の場合も、伝音成分があるためA型は不適切なことが多い
-          if (tympType === 'A') {
-            // 伝音成分が大きい場合はB型、As型、またはAd型にする
-            const rand = Math.random();
-            if (rand < 0.5) {
-              tympType = 'B';
-            } else if (rand < 0.75) {
-              tympType = 'As';
-            } else {
-              tympType = 'Ad';
-            }
-          }
         }
         
         // 所見：鼓膜所見（データベースから取得した症例がある場合はそれを使用、なければデフォルト）
@@ -1636,8 +1760,8 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
           findings = `鼓膜所見${tympType === 'B' || tympType === 'Ad' || tympType === 'As' ? '異常あり' : '正常'}`;
         }
 
-        // 追加のサニタイズ：メニエール病では高音/電話に関する表現を除去
-        if (selectedDisorder?.name === 'メニエール病') {
+        // 追加のサニタイズ：メニエー尔病では高音/電話に関する表現を除去
+        if (selectedDisorder?.name === 'メニエー尔病') {
           const highFreqWords = ['高音域', '高音', '電話', '女性の声'];
           const replaceIfHigh = (text) => highFreqWords.some(w => (text||'').includes(w))
             ? '低音域の聞こえが発作時に悪化し寛解期に改善する'
@@ -1707,25 +1831,8 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
         
         // 所見をタイプに合わせて生成
         if (casePattern === 'conductive') {
-          // 伝音性難聴の場合、ティンパ型に応じて中耳炎/離断の所見を補足
-          const tympDesc = pattern.tympType === 'B' ? 'B型' : 
-                          pattern.tympType === 'As' ? 'As型（コンプライアンス低）' : 
-                          pattern.tympType === 'Ad' ? 'Ad型（コンプライアンス増大）' : 'B型';
-          const middleEarNote = pattern.tympType === 'B'
-            ? '（滲出性/急性中耳炎を示唆：鼓膜発赤/膨隆や液貯留所見）'
-            : pattern.tympType === 'Ad'
-            ? '（耳小骨離断を示唆）'
-            : pattern.tympType === 'As'
-            ? '（耳硬化症などを示唆）'
-            : '';
+          // 伝音性難聴の場合、ティンパノグラム型に応じて中耳炎/離断の所見を補足
           findings = `鼓膜所見${pattern.tympType === 'B' || pattern.tympType === 'Ad' || pattern.tympType === 'As' ? '異常あり' : '正常'}`;
-        } else if (casePattern === 'mixed') {
-          // 混合性難聴の場合、タインパノグラム型に応じた所見
-          const tympDesc = pattern.tympType === 'B' ? 'B型' : 
-                          pattern.tympType === 'As' ? 'As型（コンプライアンス低）' : 
-                          pattern.tympType === 'Ad' ? 'Ad型（コンプライアンス増大）' : 
-                          'A型';
-          findings = `鼓膜所見${pattern.tympType === 'B' || pattern.tympType === 'Ad' ? '異常あり' : '正常'}`;
         } else {
           findings = pattern.findings;
         }
@@ -1746,67 +1853,36 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       
       findings = pattern.findings;
     }
-    
-    // 伝音性難聴・混合性難聴の場合はタインパノグラム型を修正（疾患推定で設定されていない場合、または設定されていてもA型になっている場合）
-    if (casePattern === 'conductive' || casePattern === 'mixed') {
-      // 既に設定されているが、伝音性難聴なのにA型になっている場合は修正
-      if (casePattern === 'conductive') {
-        // 伝音性難聴の場合、必ずB型、As型、またはAd型にする（A型は不可）
-        // 外傷エピソードがある場合は既にAd型に設定されているはずだが、念のためチェック
-        const traumaKeywords = ['殴られ', '耳掃除', 'ぶつかっ', '外傷', '頭部外傷', '転倒', 'ボールが', '打った'];
-        const hasTrauma = traumaKeywords.some(keyword => 
-          (chiefComplaint && chiefComplaint.includes(keyword)) || 
-          (history && history.includes(keyword))
-        );
-        
-        if (!selectedDisorder || pattern.tympType === 'A') {
-          if (hasTrauma) {
-            // 外傷エピソードがある場合はAd型（耳小骨離断）
-            pattern.tympType = 'Ad';
-          } else {
-            // 外傷エピソードがない場合はランダムに選択
-            const rand = Math.random();
-            if (rand < 0.5) {
-              pattern.tympType = 'B'; // 50%：B型（滲出性中耳炎など）- 最も一般的
-            } else if (rand < 0.75) {
-              pattern.tympType = 'As'; // 25%：As型（耳硬化症など）
-            } else {
-              pattern.tympType = 'Ad'; // 25%：Ad型（耳小骨離断など）
-            }
-          }
-        } else if (hasTrauma && pattern.tympType !== 'Ad') {
-          // 疾患推定で設定されているが、外傷エピソードがある場合はAd型に上書き
+    // 伝音性難聴の場合はティンパノグラム型を修正（疾患推定で設定されていない場合、または設定されていてもA型になっている場合）
+    if (casePattern === 'conductive') {
+      // 伝音性難聴の場合、必ずB型、As型、またはAd型にする（A型は不可）
+      // 外傷エピソードがある場合は既にAd型に設定されているはずだが、念のためチェック
+      const traumaKeywords = ['殴られ', '耳掃除', 'ぶつかっ', '外傷', '頭部外傷', '転倒', 'ボールが', '打った'];
+      const hasTrauma = traumaKeywords.some(keyword => 
+        (chiefComplaint && chiefComplaint.includes(keyword)) || 
+        (history && history.includes(keyword))
+      );
+      
+      if (!selectedDisorder || pattern.tympType === 'A') {
+        if (hasTrauma) {
+          // 外傷エピソードがある場合はAd型（耳小骨離断）
           pattern.tympType = 'Ad';
-        }
-      } else if (casePattern === 'mixed') {
-        // 混合性難聴の場合、伝音成分があるため、A型の場合はB型、As型、またはAd型にする
-        // 外傷エピソードがある場合はAd型を優先
-        const traumaKeywords = ['殴られ', '耳掃除', 'ぶつかっ', '外傷', '頭部外傷', '転倒', 'ボールが', '打った'];
-        const hasTrauma = traumaKeywords.some(keyword => 
-          (chiefComplaint && chiefComplaint.includes(keyword)) || 
-          (history && history.includes(keyword))
-        );
-        
-        if (!selectedDisorder || pattern.tympType === 'A') {
-          if (hasTrauma) {
-            pattern.tympType = 'Ad';
+        } else {
+          // 外傷エピソードがない場合はランダムに選択
+          const rand = Math.random();
+          if (rand < 0.5) {
+            pattern.tympType = 'B'; // 50%：B型（滲出性中耳炎など）- 最も一般的
+          } else if (rand < 0.75) {
+            pattern.tympType = 'As'; // 25%：As型（耳硬化症など）
           } else {
-            const rand = Math.random();
-            if (rand < 0.4) {
-              pattern.tympType = 'B'; // 40%：B型
-            } else if (rand < 0.7) {
-              pattern.tympType = 'As'; // 30%：As型
-            } else {
-              pattern.tympType = 'Ad'; // 30%：Ad型
-            }
+            pattern.tympType = 'Ad'; // 25%：Ad型（耳小骨離断など）
           }
-        } else if (hasTrauma && pattern.tympType !== 'Ad') {
-          // 外傷エピソードがある場合はAd型に上書き
-          pattern.tympType = 'Ad';
         }
+      } else if (hasTrauma && pattern.tympType !== 'Ad') {
+        // 疾患推定で設定されているが、外傷エピソードがある場合はAd型に上書き
+        pattern.tympType = 'Ad';
       }
     }
-
     // タインパノグラム生成
     let tympanogram;
     if (pattern.tympType === 'A' || pattern.tympType === 'As') {
@@ -2021,8 +2097,8 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     let pattern = 'normal';
     if (avgACOverall <= 20 && avgABGOverall <= 5) {
       pattern = 'normal';
-    } else if (avgABGOverall > 20) {
-      pattern = avgACOverall > 30 ? 'mixed' : 'conductive';
+    } else if (avgABGOverall > 15) {
+      pattern = 'conductive';
     } else {
       pattern = 'sensorineural';
     }
@@ -2046,13 +2122,11 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     if (pattern === 'conductive' && (disorder.name.includes('耳小骨') || disorder.name === '耳硬化症')) {
       score += 3;
       } else if (pattern === 'sensorineural') {
-        if (disorder.name.includes('メニエール') || disorder.name.includes('突発') || 
+        if (disorder.name.includes('メニエー尔') || disorder.name.includes('突発') || 
             disorder.name.includes('加齢') || disorder.name.includes('騒音') || 
             disorder.name.includes('音響') || disorder.name.includes('ムンプス')) {
           score += 3;
         }
-      } else if (pattern === 'mixed') {
-        score += 1; // 混合性はどの疾患でも可能性あり
       }
       
     // C5 dipの一致度（騒音性・音響外傷）
@@ -2064,15 +2138,15 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       }
     }
       
-      // 左右差の一致度（突発性、ムンプスは一側性）
+      // 左右差の一致度（突発性、ムンプ斯は一側性）
       if (asymmetry && disorder.unilateral) {
         score += 2;
       } else if (!asymmetry && !disorder.unilateral) {
         score += 1;
       }
       
-      // 低音障害（メニエール）
-      if (pattern === 'sensorineural' && lowFreqAvg > midFreqAvg + 5 && disorder.name.includes('メニエール')) {
+      // 低音障害（メニエー尔）
+      if (pattern === 'sensorineural' && lowFreqAvg > midFreqAvg + 5 && disorder.name.includes('メニエ尔')) {
         score += 2;
       }
       
@@ -2104,7 +2178,6 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       avgACOverall
     };
   };
-
   // 疾患特異的なオーディオグラムパターンを生成する関数
   const generateDisorderSpecificAudiogram = (disorder, age, frequencies, ears) => {
     let targets = [];
@@ -2114,7 +2187,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     }, {});
     
     if (disorder.pattern === 'meniere') {
-      // メニエール病：低音障害型〜水平型
+      // メニエー尔病：低音障害型〜水平型
       ears.forEach(ear => {
         const baseLoss = Math.round((Math.random() * 30 + 20) / 5) * 5; // 20-50dB
         const acValues = {};
@@ -2425,9 +2498,8 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
           targets.push({ ear, transducer: 'BC', masked: true, freq, dB: bcValue, ...(isBCSO ? { so: true } : {}) });
         });
       });
-      
     } else if (disorder.pattern === 'mumps') {
-      // ムンプス難聴：高度感音難聴〜ろう型、一側性
+      // ムンプ斯難聴：高度感音難聴〜ろう型、一側性
       const affectedEar = Math.random() > 0.5 ? 'R' : 'L';
       const severity = Math.round((Math.random() * 40 + 70) / 5) * 5; // 70-110dB（高度〜ろう）
       
@@ -2486,7 +2558,6 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     
     return targets;
   };
-
   // 聴力検査のみの自動症例生成（オーディオグラムのターゲットのみ、臨床情報は生成しない）
   const generateAudioOnlyCase = () => {
     const frequencies = [125, 250, 500, 1000, 2000, 4000, 8000];
@@ -2715,7 +2786,6 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     setCurrentCaseInfo(null);
     setCustomPresetDetails(null);
   };
-
   // AI症例生成（臨床情報も含む完全な症例生成）
   const generateAICase = async () => {
     // 新エンジンでオージオグラムを生成（sex/ageGroup/profile/severity/affectedSideは内部で乱択）
@@ -2745,26 +2815,48 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       setLevel(0);
       setMaskLevel(-15);
       setFreq(1000);
-      const meta = caseData.meta || {};
+      const meta = { ...(caseData.meta || {}) };
       const genderLabel = meta.sex === 'Male' ? '男性' : meta.sex === 'Female' ? '女性' : '';
       const ageLabel = meta.ageGroup || '';
-      const profileLabel = meta.profile || '';
-      setCurrentCaseInfo({
+      const profileName = meta.profile || meta.rightProfile || meta.leftProfile || 'Normal';
+      if (!meta.profile) meta.profile = profileName;
+      if (!meta.rightProfile) meta.rightProfile = profileName;
+      if (!meta.leftProfile) meta.leftProfile = profileName;
+      const casePatternForTests = inferCasePatternFromProfile(profileName);
+      const simpleTympanogram = buildSimpleTympanogramFromProfile(profileName, meta);
+      const artConfig = buildArtConfig(targets, simpleTympanogram, profileName, casePatternForTests, meta);
+      const dpoaeConfig = buildDPOAEConfig(targets, simpleTympanogram);
+      const caseInfo = {
         caseId: 'AI生成',
         meta,
+        casePattern: casePatternForTests,
         gender: genderLabel,
         age: ageLabel,
-        disorderType: profileLabel,
-      });
-      setCustomPresetDetails(null);
+        disorderType: profileName,
+        disorderLabel: profileName,
+        rightProfile: meta.rightProfile,
+        leftProfile: meta.leftProfile,
+        chiefComplaint: '聞こえにくさを自覚',
+        history: '詳細は不明だが追加検査で評価予定。',
+        findings: `簡易ティンパノグラム: ${simpleTympanogram.type}`,
+        explanation: '',
+        tympanogram: simpleTympanogram,
+        artConfig,
+        dpoaeConfig,
+      };
+      setCurrentCaseInfo(caseInfo);
+      setCustomPresetDetails(caseInfo);
+      setShowCaseInfoModal(false);
       return; // 旧ロジックは使用しない
     } catch (e) {
       console.error('AIエンジン生成エラー', e);
+      setCurrentCaseInfo(null);
+      setCustomPresetDetails(null);
+      return;
     }
     const frequencies = [125, 250, 500, 1000, 2000, 4000, 8000];
     const ears = ['R', 'L'];
     const transducers = ['AC', 'BC'];
-    
     // 疾患特異的なパターンを生成するか、汎用パターンを生成するか
     const useDisorderSpecific = Math.random() < 0.6; // 60%の確率で疾患特異的パターン
     let generatedTargets = [];
@@ -3054,13 +3146,21 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
         patternAnalysis.possibleDisorders.unshift({ disorder: selectedDisorderForGeneration, score: 15 });
       }
     }
-    
     // AI機能: 症例の詳細情報を生成（年齢情報と疾患推定も渡す）
     const caseDetails = await generateCaseDetails(adjustedTargets, casePattern, generatedAge, patternAnalysis);
+    const detailMeta = { ...(caseDetails.meta || {}) };
+    if (!detailMeta.profile) {
+      detailMeta.profile = detailMeta.rightProfile || detailMeta.leftProfile || casePattern;
+    }
+    if (!detailMeta.rightProfile) detailMeta.rightProfile = detailMeta.profile || casePattern;
+    if (!detailMeta.leftProfile) detailMeta.leftProfile = detailMeta.profile || casePattern;
+    caseDetails.meta = detailMeta;
+    if (!caseDetails.rightProfile) caseDetails.rightProfile = detailMeta.rightProfile;
+    if (!caseDetails.leftProfile) caseDetails.leftProfile = detailMeta.leftProfile;
     
     // ART/DPOAE設定も生成（疾患情報と症例パターンを渡す）
     const selectedDisorderName = caseDetails.selectedDisorder?.name || null;
-    caseDetails.artConfig = buildArtConfig(adjustedTargets, caseDetails.tympanogram, selectedDisorderName, caseDetails.casePattern);
+    caseDetails.artConfig = buildArtConfig(adjustedTargets, caseDetails.tympanogram, selectedDisorderName, caseDetails.casePattern, caseDetails.meta || {});
     caseDetails.dpoaeConfig = buildDPOAEConfig(adjustedTargets, caseDetails.tympanogram);
     
     setCustomPresetDetails(caseDetails);
@@ -3207,7 +3307,6 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
   useEffect(() => {
     console.log('showAnswer changed:', showAnswer);
   }, [showAnswer]);
-
   // Keyboard: Arrow keys for navigation and level control
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -3300,7 +3399,6 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     }
     setFreq(FREQS[idx]);
   }
-
   // clicking on chart -> add/replace point for current ear/trans/masked+freq
   function addOrReplacePoint(p, opts) {
     const disableBlinkAfter = opts && typeof opts.disableBlinkAfter === 'boolean' ? opts.disableBlinkAfter : true;
@@ -3477,7 +3575,6 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     }
     return Infinity; // missing → treat as no response
   }
-
   function hearsAtLevel(earKey, transKey, f, L, isMasked, mLevel) {
     const useMasked = isMasked !== undefined ? isMasked : masked;
     const useMaskLevel = mLevel !== undefined ? mLevel : maskLevel;
@@ -3668,7 +3765,6 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     // 全ての測定が完了しているか、または80%以上の精度で完了とみなす
     return accuracy.total === targets.length || accuracy.accuracy >= 80;
   }
-
   // CSV出力機能
   function exportToCSV() {
     if (measurementLog.length === 0) {
@@ -3702,7 +3798,6 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     link.click();
     document.body.removeChild(link);
   }
-
   // レポート表示機能
   function generateReport() {
     if (Object.keys(learningProgress.caseAccuracy).length === 0) {
@@ -3968,7 +4063,6 @@ ${targets.map((target, index) => {
       </div>
     );
   }
-
   return (
     <div className="w-full min-h-screen p-6 md:p-10 bg-gray-50 text-gray-900" ref={containerRef}>
       <div className="max-w-7xl mx-auto grid gap-6">
@@ -4190,7 +4284,6 @@ ${targets.map((target, index) => {
             </div>
           </div>
         )}
-
         {/* DPOAE Modal - プリセット症例用 */}
         {showDPOAE && currentCaseInfo?.dpoaeConfig && currentCaseInfo?.caseId !== 'AI生成' && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -4294,7 +4387,6 @@ ${targets.map((target, index) => {
             </div>
           </div>
         )}
-
         {/* Preset loader (secret) */}
         <div className="bg-white rounded-2xl shadow p-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -4530,8 +4622,8 @@ ${targets.map((target, index) => {
           <div className="mt-3 p-3 border rounded-xl bg-gray-50">
             <div className="text-sm font-semibold mb-1">答え合わせ（耳ごとの最終診断タイプ）</div>
             <div className="text-sm text-gray-800 flex flex-wrap gap-4">
-              <div>右耳: <span className="font-medium">{currentCaseInfo?.meta?.rightProfile || '-'}</span></div>
-              <div>左耳: <span className="font-medium">{currentCaseInfo?.meta?.leftProfile || '-'}</span></div>
+              <div>右耳: <span className="font-medium">{currentCaseInfo?.meta?.rightProfile || currentCaseInfo?.rightProfile || '-'}</span></div>
+              <div>左耳: <span className="font-medium">{currentCaseInfo?.meta?.leftProfile || currentCaseInfo?.leftProfile || '-'}</span></div>
             </div>
             <div className="text-xs text-gray-500 mt-1">
               性別: {currentCaseInfo?.gender || '-'} ／ 年代: {currentCaseInfo?.age || '-'} ／ 全体プロファイル: {currentCaseInfo?.disorderType || '-'}
@@ -4539,7 +4631,6 @@ ${targets.map((target, index) => {
           </div>
         )}
         </div>
-
         {/* Controls */}
         <div className="bg-white rounded-2xl shadow p-5">
           <div className="grid md:grid-cols-6 gap-4 text-sm">
@@ -4608,7 +4699,6 @@ ${targets.map((target, index) => {
             </div>
           </div>
         )}
-
         {/* クロスヒアリング警告 */}
         {crossHearingInfo.isCrossHearing && (
           <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
@@ -4629,8 +4719,6 @@ ${targets.map((target, index) => {
             </div>
           </div>
         )}
-
-
         {/* Audiogram */}
         <div className="bg-white rounded-2xl shadow p-5">
           <div className="flex items-center gap-3 mb-2">
@@ -4881,7 +4969,6 @@ ${targets.map((target, index) => {
             </div>
           )}
         </div>
-
         {/* Session Status */}
         <div className="bg-white rounded-2xl shadow p-5">
           <div className="flex items-center justify-between mb-4">
@@ -5109,8 +5196,6 @@ ${targets.map((target, index) => {
             </div>
           </div>
         </div>
-
-        
         {/* 開発者パネル */}
         {showDevPanel && (
           <div className="fixed right-4 top-4 bg-gray-900 text-white p-4 rounded-lg shadow-xl max-w-4xl w-[90vw] max-h-[85vh] overflow-hidden z-50 flex flex-col">
@@ -5525,7 +5610,6 @@ ${targets.map((target, index) => {
         >
           🔧 Dev
         </button>
-        
         {/* Toasts */}
         {(presetToast || randomToast) && (
           <div className="fixed right-4 bottom-4 z-50 space-y-2">
