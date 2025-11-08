@@ -120,7 +120,43 @@ flowchart TD
 
 ---
 
-## スライド10: 導入・展開シナリオ
+## スライド10: マスキング判定フローチャート
+```mermaid
+flowchart TD
+  Start[測定開始] --> Init[対象耳の測定条件確認<br/>（周波数・提示レベル初期値）]
+  Init --> Stimulus[純音提示／応答確認]
+  Stimulus -->|応答あり| ThresholdCheck[閾値判定<br/>5dB上げ→応答→10dB下げルール]
+  Stimulus -->|応答なし| LevelUp[提示レベルを5dB増加]
+  LevelUp --> Stimulus
+
+  ThresholdCheck --> StoreThreshold[閾値を仮決定・記録]
+  StoreThreshold --> ABGEval[気導-骨導差(ABG)確認]
+  ABGEval -->|ABG ≥ 既定閾値／左右差大| MaskNeeded[マスキング必要]
+  ABGEval -->|条件未満| MaskSkip[マスキング不要 → 次周波数へ]
+
+  MaskNeeded --> IAcalc[クロスヒアリング確認・IA計算]
+  IAcalc --> MaskLevel[推奨マスキングレベル算出]
+  MaskLevel --> MaskApply[マスキング適用→再測定]
+  MaskApply --> MaskResponse[応答確認]
+  MaskResponse -->|適正| Confirm[閾値確定]
+  MaskResponse -->|過小→クロスヒアリング| IncreaseMask[マスキング再調整]
+  IncreaseMask --> MaskApply
+  MaskResponse -->|過大→オーバーマスキング| DecreaseMask[マスキング減少→再測定]
+  DecreaseMask --> MaskApply
+
+  Confirm --> Verify[結果照合（臨床ルールとの整合確認）]
+  Verify -->|整合| NextFreq[次周波数へ]
+  Verify -->|矛盾あり| Review[測定条件／操作手順を見直し]
+  Review --> Stimulus
+
+  MaskSkip --> NextFreq
+  NextFreq -->|残周波数あり| Init
+  NextFreq -->|全周波数完了| End[検査終了・レポート出力]
+```
+
+---
+
+## スライド11: 導入・展開シナリオ
 ### 主な利用先
 - 大学・専門学校の聴覚検査実習
 - 医療機関の新人研修やリカレント教育
@@ -133,7 +169,7 @@ flowchart TD
 
 ---
 
-## スライド11: 開発状況とロードマップ
+## スライド12: 開発状況とロードマップ
 ### 現在の実装
 - AI症例生成・補助検査自動描画を実装済み
 - マスキング訓練UIとフィードバックロジックを実装
@@ -146,7 +182,7 @@ flowchart TD
 
 ---
 
-## スライド12: まとめ
+## スライド13: まとめ
 ### 提供価値
 - 臨床ルール準拠のAI擬似患者でマスキング判断を体系学習
 - 補助検査との整合を保ち臨床思考を深める教育体験
