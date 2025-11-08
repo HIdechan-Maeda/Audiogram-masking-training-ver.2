@@ -691,6 +691,23 @@ function buildSimpleTympanogramFromProfile(profileName, meta = {}) {
     };
   }
 
+  const clampAdCompliance = (earConfig, earType) => {
+    if (earType !== 'Ad' || !earConfig || typeof earConfig.peakCompliance !== 'number') {
+      return earConfig;
+    }
+    const capped = Math.min(earConfig.peakCompliance, 4.0);
+    if (capped === earConfig.peakCompliance) {
+      return earConfig;
+    }
+    return {
+      ...earConfig,
+      peakCompliance: Number(capped.toFixed(2)),
+    };
+  };
+
+  right = clampAdCompliance(right, rightResult.type);
+  left = clampAdCompliance(left, leftResult.type);
+
   const overallType = rightResult.type === leftResult.type
     ? rightResult.type
     : (rightResult.type !== 'A' ? rightResult.type : leftResult.type);
@@ -1904,16 +1921,20 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       };
     } else if (pattern.tympType === 'Ad') {
       // Ad型（コンプライアンス増大：耳小骨離断など）
+      const createAdCompliance = () => {
+        const value = Math.round((Math.random() * 0.6 + 1.8) * 10) / 10;
+        return Number(Math.min(value, 4.0).toFixed(1));
+      };
       tympanogram = {
         type: 'A', // 表示はA型だが、コンプライアンスが高い
         left: {
           peakPressure: Math.round((Math.random() * 40 - 20) / 5) * 5,
-          peakCompliance: Math.round((Math.random() * 0.6 + 1.8) * 10) / 10, // Ad型：1.8-2.4 mL（高コンプライアンス）
+          peakCompliance: createAdCompliance(), // Ad型：高コンプライアンス（最大4.0mL）
           sigma: 60
         },
         right: {
           peakPressure: Math.round((Math.random() * 40 - 20) / 5) * 5,
-          peakCompliance: Math.round((Math.random() * 0.6 + 1.8) * 10) / 10,
+          peakCompliance: createAdCompliance(),
           sigma: 60
         }
       };
@@ -1975,8 +1996,9 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
         if (hasTrauma) {
           pattern.tympType = 'Ad';
           tympanogram.type = 'A'; // 表示はA型だが、コンプライアンスが高い
-          tympanogram.left.peakCompliance = Math.round((Math.random() * 0.6 + 1.8) * 10) / 10;
-          tympanogram.right.peakCompliance = Math.round((Math.random() * 0.6 + 1.8) * 10) / 10;
+          const complianceAd = () => Number(Math.min(Math.round((Math.random() * 0.6 + 1.8) * 10) / 10, 4.0).toFixed(1));
+          tympanogram.left.peakCompliance = complianceAd();
+          tympanogram.right.peakCompliance = complianceAd();
           
           // 疾患を耳小骨離断に補正
           const ossicularDiscontinuity = HEARING_DISORDERS.find(d => d.name === '耳小骨離断');
