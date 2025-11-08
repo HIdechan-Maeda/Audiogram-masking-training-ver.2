@@ -656,7 +656,8 @@ function buildSimpleTympanogramFromProfile(profileName, meta = {}) {
       return { config: { peakPressure: 0, peakCompliance: 0.5, sigma: 60 }, type: 'As' };
     }
     if (earProfile === 'CHL_OssicularDiscontinuity') {
-      return { config: { peakPressure: 0, peakCompliance: 2.2, sigma: 60 }, type: 'Ad' };
+      const compliance = Number((Math.random() * 1 + 3).toFixed(1)); // 3.0 - 4.0 mL
+      return { config: { peakPressure: 0, peakCompliance: compliance, sigma: 60 }, type: 'Ad' };
     }
     if (earProfile === 'CHL_AOM') {
       return { config: { peakPressure: -200, peakCompliance: 0.3, sigma: 80 }, type: 'B' };
@@ -1922,7 +1923,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     } else if (pattern.tympType === 'Ad') {
       // Ad型（コンプライアンス増大：耳小骨離断など）
       const createAdCompliance = () => {
-        const value = Math.round((Math.random() * 0.6 + 1.8) * 10) / 10;
+        const value = Math.round((Math.random() * 1.0 + 3.0) * 10) / 10; // 3.0 - 4.0 mL
         return Number(Math.min(value, 4.0).toFixed(1));
       };
       tympanogram = {
@@ -1996,7 +1997,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
         if (hasTrauma) {
           pattern.tympType = 'Ad';
           tympanogram.type = 'A'; // 表示はA型だが、コンプライアンスが高い
-          const complianceAd = () => Number(Math.min(Math.round((Math.random() * 0.6 + 1.8) * 10) / 10, 4.0).toFixed(1));
+          const complianceAd = () => Number(Math.min(Math.round((Math.random() * 1.0 + 3.0) * 10) / 10, 4.0).toFixed(1));
           tympanogram.left.peakCompliance = complianceAd();
           tympanogram.right.peakCompliance = complianceAd();
           
