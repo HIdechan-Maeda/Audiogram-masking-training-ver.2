@@ -41,7 +41,7 @@
 ## スライド4: AC測定プロセス
 ### 操作フロー
 1. AI症例の AC 初期値を提示
-2. 測定者が 5dB下降法で閾値を決定
+2. 受講者が **5dB上昇法**（聴取不可レベルから 5dB ずつ上げる）で応答を確認
 3. 閾値仮決定→ログに記録→次周波数へ
 
 ### ルール
@@ -58,34 +58,34 @@
 - 正常・SNHL は `-10dB ≤ AC-BC ≤ +5dB`
 
 ### 測定時の確認ポイント
-- 仮閾値と AC の差から ABG を算出
+- 受講者が上昇法で応答を記録し、仮閾値と AC の差から ABG を算出
 - 最小 ABG未満なら AC を補正
 - 40dB 超の ABG は自動的に抑制
 
 ---
 
 ## スライド6: マスキング要否判定ロジック
-### 条件評価
-- ABG が疾患別最小値以上
-- 左右差が IA を超える見込み
-- テスト耳の閾値がマスキングノイズで覆われないか確認
+### 条件評価（受講者が判断）
+- ABG が疾患別最小値以上か
+- 左右差が IA を超える見込みか
+- テスト耳閾値がマスキングノイズで覆われないか
 
-### システムのサポート
+### システムのサポート（AI）
 - 条件を満たす周波数をハイライト
-- 必要なマスキング操作を指示
-- 判定根拠をツールチップで提示
+- 必要なマスキング操作をガイダンス
+- 判定ミス時に根拠をフィードバック
 
 ---
 
 ## スライド7: マスキング量算出
-### 推奨計算
+### 推奨計算（受講者が手計算）
 - 気導：`TE AC + セーフティマージン - IA`
 - 骨導：`TE BC + セーフティマージン`
-- セーフティマージンは 10dB を基本
+- セーフティマージンは 10dB を基準に調整
 
-### アプリでの表示
+### アプリでの表示（AI サポート）
 - 推奨値と設定欄を並列表示
-- 入力値と推奨値の差をリアルタイムに判定
+- 入力値と推奨値の乖離をリアルタイム判定
 - 適正範囲／過小／過大を色分け
 
 ---
@@ -118,17 +118,27 @@
 ## スライド10: 全体フローチャート
 ```mermaid
 flowchart TD
-  Start[AI症例生成] --> ACGen[AC初期値・補助検査生成]
-  ACGen --> ACMeasure[AC測定 5dB下降法]
-  ACMeasure --> BCMeasure[BC測定とABG管理]
-  BCMeasure --> MaskCheck[マスキング要否判定]
-  MaskCheck -->|必要| MaskCalc[マスキング量算出]
-  MaskCalc --> ApplyMask[マスキング適用と再測定]
-  ApplyMask --> CrossCheck[クロスヒアリング検出]
-  CrossCheck --> OverMask[オーバーマスキング監視]
-  OverMask --> ResultCheck[結果照合・ログ保存]
-  MaskCheck -->|不要| ResultCheck
-  ResultCheck --> Next[次周波数 or 検査終了]
+  subgraph AI[AIの役割]
+    Start[症例生成] --> ACGen[AC/BC初期値と補助検査生成]
+    ACGen --> Guidance[判定ガイド・推奨値提示]
+    Feedback[結果照合・フィードバック] --> Start
+  end
+
+  subgraph Learner[受講者の役割]
+    ACMeasure[AC測定 5dB上昇法] --> BCMeasure[BC測定とABG管理]
+    BCMeasure --> MaskCheck[マスキング要否判定]
+    MaskCheck -->|必要| MaskCalc[マスキング量算出]
+    MaskCalc --> ApplyMask[マスキング適用と再測定]
+    ApplyMask --> CrossCheck[クロスヒアリング検出]
+    CrossCheck --> OverMask[オーバーマスキング監視]
+    OverMask --> ResultCheck[結果照合]
+    MaskCheck -->|不要| ResultCheck
+    ResultCheck --> Next[次周波数 or 検査終了]
+    Next --> Feedback
+  end
+
+  Guidance --> ACMeasure
+  Feedback --> Guidance
 ```
 
 ---
