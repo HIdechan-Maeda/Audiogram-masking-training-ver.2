@@ -63,7 +63,7 @@ export default function StapedialReflexGif({
     if (overrideStimulus !== undefined) {
       return overrideStimulus;
     }
-
+    
     // 伝音障害の判定：ティンパノグラムB型は伝音障害を示す
     // 測定側が伝音障害（B型）なら反射消失
     if (measuredConfig.tympanogramType === 'B') {
