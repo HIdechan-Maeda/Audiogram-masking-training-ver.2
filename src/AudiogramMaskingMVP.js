@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
 import { supabase } from './supabaseClient';
-import { ResponsiveContainer, ComposedChart, XAxis, YAxis, CartesianGrid, Scatter, Line } from "recharts";
+import { ResponsiveContainer, ComposedChart, XAxis, YAxis, CartesianGrid, Scatter, Line, ReferenceArea, ReferenceLine } from "recharts";
 import TympanogramGif from './TympanogramGif';
 import StapedialReflexGif from './StapedialReflexGif';
 import DPOAE from './DPOAE';
@@ -1141,6 +1141,7 @@ export default function AudiogramMaskingMVP() {
   // 症例情報モーダル
   const [showCaseInfoModal, setShowCaseInfoModal] = useState(false);
   const [currentCaseInfo, setCurrentCaseInfo] = useState(null);
+  const [showAiAnswer, setShowAiAnswer] = useState(false);
   
   // IC settings (周波数ごとの両耳間移行減衰量)
   const [icSettings, setIcSettings] = useState(
@@ -2804,6 +2805,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     
     // 症例情報はクリア（聴力検査のみなので）
     setCurrentCaseInfo(null);
+    setShowAiAnswer(false);
     setCustomPresetDetails(null);
   };
   // AI症例生成（臨床情報も含む完全な症例生成）
@@ -2865,12 +2867,14 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
         dpoaeConfig,
       };
       setCurrentCaseInfo(caseInfo);
+      setShowAiAnswer(false);
       setCustomPresetDetails(caseInfo);
       setShowCaseInfoModal(false);
       return; // 旧ロジックは使用しない
     } catch (e) {
       console.error('AIエンジン生成エラー', e);
       setCurrentCaseInfo(null);
+      setShowAiAnswer(false);
       setCustomPresetDetails(null);
       return;
     }
@@ -3193,6 +3197,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       return { ...t, left, right };
     };
     setCurrentCaseInfo({ caseId: 'AI生成', ...caseDetails, tympanogram: normalizeTymp(caseDetails.tympanogram) });
+    setShowAiAnswer(false);
     setShowCaseInfoModal(false);
     
     // 生成された症例を適用（プリセットと同じ形式で処理）
@@ -3580,6 +3585,62 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     
     return { isCrossHearing: false, details: null };
   }, [level, ear, trans, freq, masked, maskLevel, crossHearingWarning, targetMap, icSettings]);
+
+  const maskBandVisual = useMemo(() => {
+    if (!masked || (typeof maskLevel !== 'number') || maskLevel <= -15) return null;
+    const idx = freqIndex;
+    if (idx < 0 || idx >= FREQS.length) return null;
+
+    const centerFreq = FREQS[idx];
+    const lowerBound = centerFreq / Math.SQRT2;
+    const upperBound = centerFreq * Math.SQRT2;
+
+    let lowerIdx = 0;
+    for (let i = 0; i < FREQS.length; i += 1) {
+      if (FREQS[i] >= lowerBound) { lowerIdx = i; break; }
+    }
+    let upperIdx = FREQS.length - 1;
+    for (let i = FREQS.length - 1; i >= 0; i -= 1) {
+      if (FREQS[i] <= upperBound) { upperIdx = i; break; }
+    }
+
+    const padding = 0.35;
+    let x1 = clamp(lowerIdx - padding, X_DOMAIN[0], X_DOMAIN[1]);
+    let x2 = clamp(upperIdx + padding, X_DOMAIN[0], X_DOMAIN[1]);
+    if (x2 - x1 < 0.1) {
+      x2 = Math.min(X_DOMAIN[1], x1 + 0.1);
+    }
+
+    const baseAlpha = clamp((maskLevel + 15) / (Y_MAX - Y_MIN + 15), 0, 1);
+    let fill = 'rgba(59,130,246,0.25)'; // blue
+    let fillOpacity = clamp(0.18 + baseAlpha * 0.4, 0.18, 0.65);
+    let lineColor = '#1d4ed8';
+
+    if (crossHearingInfo.isCrossHearing) {
+      fill = 'rgba(249,115,22,0.32)'; // orange
+      fillOpacity = Math.max(fillOpacity, 0.35);
+      lineColor = '#f97316';
+    }
+    if (isOverMasking) {
+      fill = 'rgba(239,68,68,0.42)'; // red
+      fillOpacity = 0.45;
+      lineColor = '#dc2626';
+    }
+
+    const clampedMaskLevel = clamp(maskLevel, Y_MIN, Y_MAX);
+    const highlightTop = Math.min(clampedMaskLevel, Y_MIN);
+    const highlightBottom = Math.max(clampedMaskLevel, Y_MIN);
+
+    return {
+      x1,
+      x2,
+      y1: highlightTop,
+      y2: highlightBottom,
+      fill,
+      fillOpacity,
+      lineColor
+    };
+  }, [masked, maskLevel, freqIndex, ear, isOverMasking, crossHearingInfo, targetMap, freq]);
 
   function getThr(earKey, transKey, f) {
     const key = `${earKey}|${transKey}|${f}`;
@@ -4420,6 +4481,7 @@ ${targets.map((target, index) => {
               const caseDetails = PRESET_DETAILS[newPreset];
               if (caseDetails) {
                 setCurrentCaseInfo({ caseId: newPreset, ...caseDetails });
+                setShowAiAnswer(false);
               }
             }}>
               <option value="A">症例A</option>
@@ -4461,6 +4523,7 @@ ${targets.map((target, index) => {
                 const caseDetails = PRESET_DETAILS[selectedPreset];
                 if (caseDetails) {
                   setCurrentCaseInfo({ caseId: selectedPreset, ...caseDetails });
+                  setShowAiAnswer(false);
                   // 症例情報モーダルは表示しない（UI不要）
                   setShowCaseInfoModal(false);
                   setShowTympanogram(false);
@@ -4634,11 +4697,24 @@ ${targets.map((target, index) => {
                 DPOAE検査を見る
               </button>
             )}
+            {currentCaseInfo?.caseId === 'AI生成' && (
+              <button
+                onClick={() => setShowAiAnswer(v => !v)}
+                className={`px-3 py-2 rounded-xl text-sm flex items-center gap-2 border ${
+                  showAiAnswer
+                    ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                    : 'bg-white text-emerald-700 border-emerald-600 hover:bg-emerald-50'
+                }`}
+                title="AI症例の答え合わせを表示"
+              >
+                {showAiAnswer ? '答え合わせを隠す' : '答え合わせを見る'}
+              </button>
+            )}
             <span className="text-xs text-gray-400">🤖 AIにより症例パターンを自動生成（正常・感音性・伝音性・混合性難聴）+ 臨床情報も自動生成</span>
           </div>
 
         {/* 答え合わせ（AI症例用） */}
-        {currentCaseInfo?.caseId === 'AI生成' && (
+        {currentCaseInfo?.caseId === 'AI生成' && showAiAnswer && (
           <div className="mt-3 p-3 border rounded-xl bg-gray-50">
             <div className="text-sm font-semibold mb-1">答え合わせ（耳ごとの最終診断タイプ）</div>
             <div className="text-sm text-gray-800 flex flex-wrap gap-4">
@@ -4824,6 +4900,18 @@ ${targets.map((target, index) => {
                   <XAxis type="number" dataKey="x" domain={X_DOMAIN} ticks={Array.from({ length: FREQS.length }, (_, i) => i)} tickFormatter={formatFreq} label={{ value: 'Frequency (Hz) - 1 octave/grid', position: 'bottom', offset: 6, style: { fontSize: 22 } }} tick={{ fontSize: 20 }} />
                   <YAxis type="number" dataKey="y" domain={[Y_MIN, Y_MAX]} ticks={Array.from({ length: (Y_MAX - Y_MIN) / 10 + 1 }, (_, i) => Y_MIN + i * 10)} reversed={true} tickMargin={6} label={{ value: 'Hearing Level (dB HL) - 10 dB/grid', angle: -90, position: 'left', offset: 0, dy: -100, style: { fontSize: 22 } }} tick={{ fontSize: 20 }} />
                   <Line data={[{ x: 0, y: 0 }, { x: FREQS.length - 1, y: 0 }]} dataKey="y" xAxisId={0} yAxisId={0} type="monotone" dot={false} stroke="#94a3b8" strokeWidth={2} />
+
+                  {maskBandVisual && (
+                    <ReferenceArea
+                      x1={maskBandVisual.x1}
+                      x2={maskBandVisual.x2}
+                      y1={maskBandVisual.y1}
+                      y2={maskBandVisual.y2}
+                      fill={maskBandVisual.fill}
+                      fillOpacity={maskBandVisual.fillOpacity}
+                      ifOverflow="extendDomain"
+                    />
+                  )}
 
                   {SERIES.map(s => (
                     <Scatter key={s.key} name={s.label} data={(seriesData[s.key] || []).map(d => ({ x: d.x, y: d.y, ...(d.so ? { so: true } : {}) }))} fill={s.color} shape={shapeRenderer(s.shape, s.color)} />
