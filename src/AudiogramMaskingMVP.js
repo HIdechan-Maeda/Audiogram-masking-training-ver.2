@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
 import { supabase } from './supabaseClient';
 import { ResponsiveContainer, ComposedChart, XAxis, YAxis, CartesianGrid, Scatter, Line, ReferenceArea, ReferenceLine } from "recharts";
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import TympanogramGif from './TympanogramGif';
 import StapedialReflexGif from './StapedialReflexGif';
 import DPOAE from './DPOAE';
@@ -1060,10 +1062,11 @@ function LegendMark({ shape, color }) {
   );
 }
 export default function AudiogramMaskingMVP() {
-  // 講習会用パスワード保護
+  // 学生IDログイン管理
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
-  const TRAINING_PASSWORD = 'audiogram2024'; // 講習会用パスワード
+  const [studentId, setStudentId] = useState('');
+  const [currentStudentId, setCurrentStudentId] = useState(null);
+  const [isLoadingLogin, setIsLoadingLogin] = useState(false);
 
   // Basic UI state
   const [ear, setEar] = useState('R'); // 'R' | 'L'
@@ -1181,24 +1184,310 @@ export default function AudiogramMaskingMVP() {
     }
   }, [randomCasePerformance]);
 
-  // Supabase Anonymous Auth
+  // Supabase Anonymous Auth（学生IDログイン後）
   const [userId, setUserId] = useState(null);
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
+  
+  // 学生IDでログインする関数
+  const handleStudentLogin = async () => {
+    if (!studentId.trim()) {
+      alert('学生IDを入力してください');
+      return;
+    }
+    
+    setIsLoadingLogin(true);
+    try {
+      // 学生IDを正規化（空白削除、大文字変換）
+      const normalizedStudentId = studentId.trim().toUpperCase();
+      
+      // 匿名認証でSupabaseにサインイン（テーブルがなくてもログインできるように）
+      let authData = null;
+      let userId = null;
+      
       try {
-        // すでにサインイン済みか確認
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (sessionData?.session?.user?.id) {
-          if (mounted) setUserId(sessionData.session.user.id);
+        const { data: authResult, error: authError } = await supabase.auth.signInAnonymously();
+        if (authError) {
+          console.warn('匿名認証エラー（テーブル未作成の可能性）:', authError);
+          // 認証に失敗してもローカルでログインできるようにする
+          userId = `local_${normalizedStudentId}_${Date.now()}`;
         } else {
-          const { data, error } = await supabase.auth.signInAnonymously();
-          if (!error && data?.user?.id && mounted) setUserId(data.user.id);
+          authData = authResult;
+          userId = authResult?.user?.id || `local_${normalizedStudentId}_${Date.now()}`;
         }
-      } catch {}
-    })();
-    return () => { mounted = false; };
-  }, []);
+      } catch (authErr) {
+        console.warn('認証処理エラー:', authErr);
+        userId = `local_${normalizedStudentId}_${Date.now()}`;
+      }
+      
+      setUserId(userId);
+      
+      // 学生情報をSupabaseに保存または取得（テーブルが存在する場合のみ）
+      try {
+        const { data: existingStudent, error: fetchError } = await supabase
+          .from('students')
+          .select('*')
+          .eq('student_id', normalizedStudentId)
+          .single();
+        
+        if (fetchError && fetchError.code !== 'PGRST116') {
+          // PGRST116は「見つからない」エラー（正常）
+          // その他のエラーはテーブルが存在しない可能性
+          if (fetchError.code === '42P01' || fetchError.message?.includes('does not exist')) {
+            console.warn('studentsテーブルが存在しません。ローカルモードで続行します。');
+          } else {
+            console.error('学生情報の取得エラー:', fetchError);
+          }
+        }
+        
+        // 学生が存在しない場合は新規作成（テーブルが存在する場合のみ）
+        if (!existingStudent && authData?.user?.id) {
+          const { error: insertError } = await supabase
+            .from('students')
+            .insert({
+              student_id: normalizedStudentId,
+              user_id: authData.user.id,
+              created_at: new Date().toISOString()
+            });
+          
+          if (insertError) {
+            if (insertError.code === '42P01' || insertError.message?.includes('does not exist')) {
+              console.warn('studentsテーブルが存在しません。ローカルモードで続行します。');
+            } else {
+              console.error('学生情報の保存エラー:', insertError);
+            }
+          }
+        } else if (existingStudent && authData?.user?.id) {
+          // 既存の学生のuser_idを更新（匿名認証のIDを紐付け）
+          const { error: updateError } = await supabase
+            .from('students')
+            .update({ user_id: authData.user.id })
+            .eq('student_id', normalizedStudentId);
+          
+          if (updateError) {
+            console.error('学生情報の更新エラー:', updateError);
+          }
+        }
+      } catch (dbError) {
+        console.warn('データベース操作エラー（テーブル未作成の可能性）:', dbError);
+        // テーブルが存在しない場合でもログインを続行
+      }
+      
+      // ログイン成功（テーブルがなくてもローカルで動作）
+      setCurrentStudentId(normalizedStudentId);
+      setIsAuthenticated(true);
+      
+      // 学生IDに紐づく進捗データを読み込む（テーブルが存在する場合のみ）
+      try {
+        await loadStudentProgress(normalizedStudentId);
+      } catch (progressError) {
+        console.warn('進捗データの読み込みエラー（テーブル未作成の可能性）:', progressError);
+        // 進捗データの読み込みに失敗してもログインは続行
+      }
+    } catch (error) {
+      console.error('ログインエラー:', error);
+      alert(`ログインに失敗しました: ${error.message || '不明なエラー'}\n\nブラウザのコンソールで詳細を確認してください。`);
+    } finally {
+      setIsLoadingLogin(false);
+    }
+  };
+  
+  // 学生IDに紐づく進捗データを読み込む
+  const loadStudentProgress = async (sid) => {
+    try {
+      // 初回ロードフラグをリセット（Supabaseから読み込むため）
+      isInitialLoad.current = true;
+      
+      // まずローカルストレージから読み込む（フォールバック）
+      try {
+        const localKey = `audiogram_learning_progress_${sid}`;
+        const localSaved = localStorage.getItem(localKey);
+        if (localSaved) {
+          const localProgress = JSON.parse(localSaved);
+          setLearningProgress(localProgress);
+        }
+      } catch (e) {
+        console.warn('ローカルストレージからの読み込みエラー:', e);
+      }
+      
+      // Supabaseから読み込む（テーブルが存在する場合）
+      try {
+        const { data, error } = await supabase
+          .from('student_progress')
+          .select('*')
+          .eq('student_id', sid)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (error && error.code !== 'PGRST116') {
+          if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            console.warn('student_progressテーブルが存在しません。ローカルストレージを使用します。');
+          } else {
+            console.error('進捗データの読み込みエラー:', error);
+          }
+          isInitialLoad.current = false;
+          return;
+        }
+        
+        if (data && data.progress_data) {
+          // Supabaseから読み込んだ進捗データを適用
+          try {
+            const progressData = typeof data.progress_data === 'string' 
+              ? JSON.parse(data.progress_data) 
+              : data.progress_data;
+            setLearningProgress(progressData);
+            // ローカルストレージにも保存
+            const localKey = `audiogram_learning_progress_${sid}`;
+            localStorage.setItem(localKey, JSON.stringify(progressData));
+            // 初回ロード完了後、次回の変更から保存するようにフラグをリセット
+            setTimeout(() => {
+              isInitialLoad.current = false;
+            }, 100);
+          } catch (e) {
+            console.error('進捗データのパースエラー:', e);
+            isInitialLoad.current = false;
+          }
+        } else {
+          // データがない場合は初回ロードフラグをリセット
+          isInitialLoad.current = false;
+        }
+      } catch (dbError) {
+        console.warn('データベース読み込みエラー（テーブル未作成の可能性）:', dbError);
+        isInitialLoad.current = false;
+      }
+    } catch (error) {
+      console.error('進捗データ読み込みエラー:', error);
+      isInitialLoad.current = false;
+    }
+  };
+  
+  // 進捗データをSupabaseに保存する関数
+  const saveStudentProgress = async (progressData) => {
+    if (!currentStudentId) return;
+    
+    // まずローカルストレージに保存（常に動作）
+    try {
+      const localKey = `audiogram_learning_progress_${currentStudentId}`;
+      localStorage.setItem(localKey, JSON.stringify(progressData));
+    } catch (e) {
+      console.error('ローカルストレージへの保存エラー:', e);
+    }
+    
+    // Supabaseにも保存（テーブルが存在する場合）
+    try {
+      const { error } = await supabase
+        .from('student_progress')
+        .upsert({
+          student_id: currentStudentId,
+          progress_data: progressData,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'student_id'
+        });
+      
+      if (error) {
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          console.warn('student_progressテーブルが存在しません。ローカルストレージのみに保存しました。');
+        } else {
+          console.error('進捗データの保存エラー:', error);
+        }
+      }
+    } catch (error) {
+      console.warn('データベース保存エラー（テーブル未作成の可能性）:', error);
+      // エラーが発生してもローカルストレージには保存済みなので続行
+    }
+  };
+  
+  // 進捗が変更されたらSupabaseに保存（初回ロード時は除外）
+  const isInitialLoad = useRef(true);
+  useEffect(() => {
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+    if (isAuthenticated && currentStudentId && learningProgress) {
+      saveStudentProgress(learningProgress);
+    }
+  }, [learningProgress, isAuthenticated, currentStudentId]);
+
+  // オーディオグラムを画像としてダウンロードする関数
+  const downloadAudiogramAsImage = async (format = 'jpeg') => {
+    if (!chartHostRef.current) {
+      alert('チャートが見つかりません');
+      return;
+    }
+
+    try {
+      // チャート要素をキャプチャ
+      const canvas = await html2canvas(chartHostRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2, // 高解像度
+        logging: false,
+        useCORS: true,
+      });
+
+      if (format === 'jpeg' || format === 'jpg') {
+        // JPEG形式でダウンロード
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        const link = document.createElement('a');
+        link.download = `audiogram_${selectedPreset}_${new Date().toISOString().slice(0, 10)}.jpg`;
+        link.href = dataUrl;
+        link.click();
+      } else if (format === 'png') {
+        // PNG形式でダウンロード
+        const dataUrl = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `audiogram_${selectedPreset}_${new Date().toISOString().slice(0, 10)}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
+    } catch (error) {
+      console.error('画像のダウンロードに失敗しました:', error);
+      alert('画像のダウンロードに失敗しました。もう一度お試しください。');
+    }
+  };
+
+  // オーディオグラムをPDFとしてダウンロードする関数
+  const downloadAudiogramAsPDF = async () => {
+    if (!chartHostRef.current) {
+      alert('チャートが見つかりません');
+      return;
+    }
+
+    try {
+      // チャート要素をキャプチャ
+      const canvas = await html2canvas(chartHostRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2, // 高解像度
+        logging: false,
+        useCORS: true,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'landscape', // 横向き
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      // A4サイズに合わせて画像を配置
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+      const imgX = (pdfWidth - imgWidth * ratio) / 2;
+      const imgY = (pdfHeight - imgHeight * ratio) / 2;
+
+      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+      
+      // ファイル名に症例IDと日付を含める
+      const fileName = `audiogram_${selectedPreset}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      pdf.save(fileName);
+    } catch (error) {
+      console.error('PDFのダウンロードに失敗しました:', error);
+      alert('PDFのダウンロードに失敗しました。もう一度お試しください。');
+    }
+  };
 
   // OpenAI API統合: 症例情報を生成する関数（オプション）
   const generateCaseDetailsWithOpenAI = async (generatedTargets, casePattern, generatedAge, patternAnalysis, selectedDisorder) => {
@@ -4108,37 +4397,39 @@ ${targets.map((target, index) => {
     }
   }
 
-  // パスワード認証画面
+  // 学生IDログイン画面
   if (!isAuthenticated) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center bg-gray-50">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full mx-4">
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">HearSim - オーディオグラム講習会</h1>
-            <p className="text-gray-600">参加用パスワードを入力してください</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">HearSim - オーディオグラム演習</h1>
+            <p className="text-gray-600">学生IDを入力してログインしてください</p>
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">パスワード</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">学生ID</label>
               <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && password === TRAINING_PASSWORD && setIsAuthenticated(true)}
+                type="text"
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && !isLoadingLogin && handleStudentLogin()}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="講習会パスワード"
+                placeholder="例: 2024001"
+                disabled={isLoadingLogin}
               />
+              <p className="mt-1 text-xs text-gray-500">※ 学生IDは成績管理に使用されます</p>
             </div>
             <button
-              onClick={() => password === TRAINING_PASSWORD && setIsAuthenticated(true)}
-              disabled={password !== TRAINING_PASSWORD}
+              onClick={handleStudentLogin}
+              disabled={!studentId.trim() || isLoadingLogin}
               className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
-              参加する
+              {isLoadingLogin ? 'ログイン中...' : 'ログイン'}
             </button>
           </div>
           <div className="mt-6 text-center text-sm text-gray-500">
-            パスワード: audiogram2024
+            学生IDでログインすると、進捗状況が自動的に保存されます
           </div>
         </div>
       </div>
@@ -4150,27 +4441,118 @@ ${targets.map((target, index) => {
         <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold">HearSim (Hearing Simulator)</h1>
-            <p className="text-sm text-gray-600 mt-1">講習会参加中 - 講師の指示に従って操作してください</p>
+            <p className="text-sm text-gray-600 mt-1">
+              学生ID: <span className="font-semibold text-blue-600">{currentStudentId}</span> - 進捗状況は自動保存されます
+            </p>
           </div>
-          <button
-            onClick={() => setIsAuthenticated(false)}
-            className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-          >
-            退出
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                if (window.confirm('ログアウトしますか？進捗状況は保存されています。')) {
+                  setIsAuthenticated(false);
+                  setCurrentStudentId(null);
+                  setStudentId('');
+                }
+              }}
+              className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+            >
+              ログアウト
+            </button>
+          </div>
         </header>
+
+        {/* 学習進捗ダッシュボード */}
+        <div className="bg-white rounded-2xl shadow p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">学習進捗状況</h2>
+            <button 
+              onClick={() => {
+                if (window.confirm('学習進捗をリセットしますか？この操作は取り消せません。')) {
+                  resetProgress();
+                }
+              }} 
+              className="px-3 py-1 rounded-lg border text-sm bg-red-100 hover:bg-red-200 text-red-700"
+            >
+              進捗リセット
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-indigo-50 rounded-lg p-4">
+              <div className="text-sm text-indigo-600 font-medium">総セッション数</div>
+              <div className="text-2xl font-bold text-indigo-800">{learningProgress.totalSessions || 0}</div>
+            </div>
+            
+            <div className="bg-teal-50 rounded-lg p-4">
+              <div className="text-sm text-teal-600 font-medium">完了症例数</div>
+              <div className="text-2xl font-bold text-teal-800">
+                {learningProgress.completedCases?.length || 0}/{PRESET_KEYS.length}
+              </div>
+            </div>
+            
+            <div className="bg-amber-50 rounded-lg p-4">
+              <div className="text-sm text-amber-600 font-medium">平均精度</div>
+              <div className="text-2xl font-bold text-amber-800">
+                {Object.keys(learningProgress.caseAccuracy || {}).length > 0 ? 
+                  Math.round(Object.values(learningProgress.caseAccuracy).reduce((sum, acc) => sum + (acc.accuracy || 0), 0) / Object.keys(learningProgress.caseAccuracy).length) : 0}%
+              </div>
+            </div>
+            
+            <div className="bg-rose-50 rounded-lg p-4">
+              <div className="text-sm text-rose-600 font-medium">最終セッション</div>
+              <div className="text-sm font-bold text-rose-800">
+                {learningProgress.lastSessionDate ? new Date(learningProgress.lastSessionDate).toLocaleDateString('ja-JP') : '未実施'}
+              </div>
+            </div>
+          </div>
+          
+          {/* 症例別進捗 */}
+          <div className="mt-6">
+            <h3 className="text-md font-semibold mb-3">症例別進捗</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {PRESET_KEYS.map(caseId => {
+                const caseData = learningProgress.caseAccuracy?.[caseId];
+                const isCompleted = learningProgress.completedCases?.includes(caseId);
+                
+                return (
+                  <div 
+                    key={caseId} 
+                    className={`p-3 rounded-lg border text-center ${
+                      isCompleted 
+                        ? 'bg-green-50 border-green-200 text-green-800' 
+                        : 'bg-gray-50 border-gray-200 text-gray-600'
+                    }`}
+                  >
+                    <div className="font-semibold">症例{caseId}</div>
+                    {isCompleted && caseData ? (
+                      <>
+                        <div className="text-sm font-bold">{caseData.accuracy}%</div>
+                        <div className="text-xs text-green-600 font-medium">✓ 完了</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {caseData.correct}/{caseData.total}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-sm">未完了</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
 
         {/* 講習会用説明 */}
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
           <div className="flex items-start gap-3">
             <div className="text-blue-600 text-xl">📚</div>
             <div>
-              <div className="font-semibold text-blue-800">講習会参加者の方へ</div>
+              <div className="font-semibold text-blue-800">演習参加者の方へ</div>
               <div className="text-sm text-blue-700 mt-1">
                 • 講師の指示に従って症例を選択してください<br/>
                 • 各自で操作しながら学習を進めてください<br/>
                 • 質問がある場合はチャットでお聞きください<br/>
-                • 正答表示は講師の指示があるまで待ってください
+                • 進捗状況は自動的に保存されます
               </div>
             </div>
           </div>
@@ -4989,6 +5371,38 @@ ${targets.map((target, index) => {
                       <div className="whitespace-nowrap"><strong>マウス:</strong> チャートクリックで打点</div>
                     </div>
                   </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-[15px] leading-snug max-w-[420px]">
+                    <div className="flex items-start gap-2 mb-2">
+                      <div className="text-blue-600 text-[18px]">📥</div>
+                      <div className="font-semibold text-blue-800 text-[16px]">ダウンロード</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => downloadAudiogramAsImage('jpeg')}
+                        className="px-2.5 py-1.5 rounded-lg border text-xs bg-blue-600 text-white border-blue-600 hover:bg-blue-700 flex items-center gap-1.5"
+                        title="オーディオグラムをJPEG画像としてダウンロード"
+                      >
+                        <span>📥</span>
+                        <span>JPEG</span>
+                      </button>
+                      <button
+                        onClick={() => downloadAudiogramAsImage('png')}
+                        className="px-2.5 py-1.5 rounded-lg border text-xs bg-green-600 text-white border-green-600 hover:bg-green-700 flex items-center gap-1.5"
+                        title="オーディオグラムをPNG画像としてダウンロード"
+                      >
+                        <span>📥</span>
+                        <span>PNG</span>
+                      </button>
+                      <button
+                        onClick={downloadAudiogramAsPDF}
+                        className="px-2.5 py-1.5 rounded-lg border text-xs bg-red-600 text-white border-red-600 hover:bg-red-700 flex items-center gap-1.5"
+                        title="オーディオグラムをPDFとしてダウンロード"
+                      >
+                        <span>📄</span>
+                        <span>PDF</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -5173,137 +5587,6 @@ ${targets.map((target, index) => {
           )}
         </div>
 
-        {/* Learning Progress Dashboard */}
-        <div className="bg-white rounded-2xl shadow p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">学習進捗</h2>
-            <button 
-              onClick={() => resetProgress()} 
-              className="px-3 py-1 rounded-lg border text-sm bg-red-100 hover:bg-red-200 text-red-700"
-            >
-              進捗リセット
-            </button>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-indigo-50 rounded-lg p-4">
-              <div className="text-sm text-indigo-600 font-medium">総セッション数</div>
-              <div className="text-2xl font-bold text-indigo-800">{learningProgress.totalSessions}</div>
-            </div>
-            
-            <div className="bg-teal-50 rounded-lg p-4">
-              <div className="text-sm text-teal-600 font-medium">完了症例数</div>
-              <div className="text-2xl font-bold text-teal-800">{learningProgress.completedCases.length}/8</div>
-            </div>
-            
-            <div className="bg-amber-50 rounded-lg p-4">
-              <div className="text-sm text-amber-600 font-medium">平均精度</div>
-              <div className="text-2xl font-bold text-amber-800">
-                {Object.keys(learningProgress.caseAccuracy).length > 0 ? 
-                  Math.round(Object.values(learningProgress.caseAccuracy).reduce((sum, acc) => sum + acc.accuracy, 0) / Object.keys(learningProgress.caseAccuracy).length) : 0}%
-              </div>
-            </div>
-            
-            <div className="bg-rose-50 rounded-lg p-4">
-              <div className="text-sm text-rose-600 font-medium">最終セッション</div>
-              <div className="text-sm font-bold text-rose-800">
-                {learningProgress.lastSessionDate || '未実施'}
-              </div>
-            </div>
-          </div>
-          
-          {/* 症例別進捗 */}
-          <div className="mt-6">
-            <h3 className="text-md font-semibold mb-3">プリセット症例の進捗</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-8 gap-3">
-              {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map(caseId => {
-                const caseData = learningProgress.caseAccuracy[caseId];
-                const isCompleted = learningProgress.completedCases.includes(caseId);
-                
-                return (
-                  <div 
-                    key={caseId} 
-                    className={`p-3 rounded-lg border text-center ${
-                      isCompleted 
-                        ? 'bg-green-50 border-green-200 text-green-800' 
-                        : 'bg-gray-50 border-gray-200 text-gray-600'
-                    }`}
-                  >
-                    <div className="font-semibold">症例{caseId}</div>
-                    {isCompleted ? (
-                      <>
-                        <div className="text-sm font-bold">{caseData.accuracy}%</div>
-                        <div className="text-xs text-green-600 font-medium">✓ 完了</div>
-                      </>
-                    ) : (
-                      <div className="text-sm">未完了</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          
-          {/* 自動生成問題の進捗 */}
-          <div className="mt-6">
-            <h3 className="text-md font-semibold mb-3">自動生成問題の進捗</h3>
-            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-5 border border-purple-200">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white rounded-lg p-4 border border-purple-200">
-                  <div className="text-sm text-purple-600 font-medium">総症例数</div>
-                  <div className="text-2xl font-bold text-purple-800 mt-1">{randomCasePerformance.totalCases}</div>
-                </div>
-                
-                <div className="bg-white rounded-lg p-4 border border-purple-200">
-                  <div className="text-sm text-purple-600 font-medium">満点症例数</div>
-                  <div className="text-2xl font-bold text-purple-800 mt-1">{randomCasePerformance.correctCases}</div>
-                  {randomCasePerformance.totalCases > 0 && (
-                    <div className="text-xs text-purple-500 mt-1">
-                      ({Math.round((randomCasePerformance.correctCases / randomCasePerformance.totalCases) * 100)}%)
-                    </div>
-                  )}
-                </div>
-                
-                <div className="bg-white rounded-lg p-4 border border-purple-200">
-                  <div className="text-sm text-purple-600 font-medium">現在の連続満点</div>
-                  <div className="text-2xl font-bold text-purple-800 mt-1">{randomCasePerformance.streak}</div>
-                  {randomCasePerformance.streak > 0 && (
-                    <div className="text-xs text-green-600 font-medium mt-1">🔥 記録継続中</div>
-                  )}
-                </div>
-                
-                <div className="bg-white rounded-lg p-4 border border-purple-200">
-                  <div className="text-sm text-purple-600 font-medium">最大連続満点</div>
-                  <div className="text-2xl font-bold text-purple-800 mt-1">{randomCasePerformance.maxStreak}</div>
-                  {randomCasePerformance.maxStreak >= 3 && (
-                    <div className="text-xs text-amber-600 font-medium mt-1">🏆 素晴らしい！</div>
-                  )}
-                </div>
-              </div>
-              
-              {/* 最近の症例履歴 */}
-              {randomCasePerformance.caseHistory.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-purple-200">
-                  <div className="text-sm text-purple-600 font-medium mb-2">最近の症例履歴</div>
-                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-                    {randomCasePerformance.caseHistory.slice(-20).reverse().map((caseRecord, index) => (
-                      <div 
-                        key={index}
-                        className={`px-2 py-1 rounded text-xs font-semibold ${
-                          caseRecord.correct 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-red-100 text-red-700'
-                        }`}
-                      >
-                        {caseRecord.correct ? '✓' : '✗'} {caseRecord.accuracy}%
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
         {/* Toasts */}
         {(presetToast || randomToast) && (
           <div className="fixed right-4 bottom-4 z-50 space-y-2">
