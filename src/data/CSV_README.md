@@ -50,3 +50,4 @@ caseId,chiefComplaint,hpi,otoscopy,tympanogram,ac_125,ac_250,ac_500,ac_1000,ac_2
 CSVファイルは自動的にJSONに変換されて読み込まれます。
 `loadCaseDatabase()` 関数を使用して症例データを取得できます。
 
+
