@@ -1,18 +1,24 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import AudiogramMaskingMVP from './AudiogramMaskingMVP';
-import InstructorApp from './InstructorApp';
-import HearingAidSimulator from './HearingAidSimulator';
+import TympanogramViewer from './TympanogramViewer';
 
-// URLパラメータで講師用ダッシュボードや補聴器シミュレーターにアクセス
+// URLパラメータで表示するコンポーネントを切り替え
 const urlParams = new URLSearchParams(window.location.search);
-const mode = urlParams.get('mode');
+const view = urlParams.get('view');
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    {mode === 'instructor' ? <InstructorApp /> : 
-     mode === 'hearing-aid' ? <HearingAidSimulator /> : 
-     <AudiogramMaskingMVP />}
-  </React.StrictMode>
-);
+
+if (view === 'tympanogram') {
+  root.render(
+    <React.StrictMode>
+      <TympanogramViewer />
+    </React.StrictMode>
+  );
+} else {
+  root.render(
+    <React.StrictMode>
+      <AudiogramMaskingMVP />
+    </React.StrictMode>
+  );
+}

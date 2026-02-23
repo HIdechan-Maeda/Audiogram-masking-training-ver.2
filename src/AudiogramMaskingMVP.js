@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } from "react";
 import { supabase } from './supabaseClient';
 import { ResponsiveContainer, ComposedChart, XAxis, YAxis, CartesianGrid, Scatter, Line, ReferenceArea, ReferenceLine } from "recharts";
 import html2canvas from 'html2canvas';
@@ -245,6 +245,8 @@ const PRESET_DETAILS = {
     chiefComplaint: '学校検診で聞こえの悪さを指摘された',
     history: '本人から話を聞くと周囲がうるさくて、検査音が聞こえなかった様子。念の為受信した',
     findings: '鼓膜所見正常',
+    diagnosis: '正常聴力（学校検診での誤検出）',
+    diseaseName: '正常',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: 0, peakCompliance: 1.5, sigma: 60 },
@@ -257,6 +259,8 @@ const PRESET_DETAILS = {
     chiefComplaint: '右耳難聴、耳鳴、めまい感',
     history: '昨日から突然右耳の耳閉塞感と耳鳴、回転性めまい感あり。今日になってめまい感はだいぶ治ったが、聞こえの悪さは変わらないため受診した',
     findings: '鼓膜所見正常',
+    diagnosis: '突発性難聴（右）',
+    diseaseName: '突発性難聴',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: -10, peakCompliance: 1.5, sigma: 60 },
@@ -269,6 +273,8 @@ const PRESET_DETAILS = {
     chiefComplaint: '左耳の聞こえの悪さ',
     history: '入学時の学校検診で左耳難聴を指摘され、精査のため受診した',
     findings: '鼓膜所見正常',
+    diagnosis: '感音性難聴（左）',
+    diseaseName: '感音性難聴',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: 0, peakCompliance: 0.8, sigma: 60 },
@@ -281,6 +287,8 @@ const PRESET_DETAILS = {
     chiefComplaint: '耳閉塞感、耳鳴り、めまい',
     history: '20歳の時、右耳突発性難聴。1週間前から回転性めまいあり。良くなったり悪くなったり。左耳ゴーという耳鳴りが気になる',
     findings: '鼓膜所見正常',
+    diagnosis: 'メニエール病（左）',
+    diseaseName: 'メニエール病',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: -15, peakCompliance: 1.3, sigma: 60 },
@@ -293,6 +301,8 @@ const PRESET_DETAILS = {
     chiefComplaint: '聞こえの悪さ（特に左耳）',
     history: '徐々に聞こえ悪くなった。最近、電話を左で取ると聞こえづらいのがわかった。今は右耳で電話をとっている。いつから聞こえ悪いのかよくわからない',
     findings: '鼓膜所見正常',
+    diagnosis: '感音性難聴（左優位）',
+    diseaseName: '感音性難聴',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: -10, peakCompliance: 1.2, sigma: 60 },
@@ -305,6 +315,8 @@ const PRESET_DETAILS = {
     chiefComplaint: 'TVの音が聞こえにくい',
     history: 'ご主人から聞こえの悪さを指摘される。TVの音が大きいと言われる。そう言われたらそうかなと。ご主人が補聴器を勧めてきたので、仕方なく受診した',
     findings: '鼓膜所見正常',
+    diagnosis: '加齢性難聴（両側）',
+    diseaseName: '加齢性難聴',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: 5, peakCompliance: 1.1, sigma: 60 },
@@ -317,6 +329,8 @@ const PRESET_DETAILS = {
     chiefComplaint: '鼻水が出る。聞こえの悪さ',
     history: '小さい頃から滲出性中耳炎を繰り返す',
     findings: '鼓膜所見：色が悪い・陥没あり',
+    diagnosis: '滲出性中耳炎（両側）',
+    diseaseName: '滲出性中耳炎',
     tympanogram: { 
       type: 'B', 
       left: { peakPressure: -200, peakCompliance: 0.2, sigma: 80 },
@@ -329,6 +343,8 @@ const PRESET_DETAILS = {
     chiefComplaint: '耳痛、聞こえの悪さ、耳閉塞感',
     history: '2日前より耳痛と耳閉塞感あり',
     findings: '鼓膜所見炎症（＋）',
+    diagnosis: '急性中耳炎（右）',
+    diseaseName: '急性中耳炎',
     tympanogram: { 
       type: 'MIX', 
       left: { peakPressure: 0, peakCompliance: 1.2, sigma: 60 },     // 左A型
@@ -845,11 +861,12 @@ function generateDPOAEData(dpoaeConfig, caseId = '') {
       const acThreshold = acThresholds[freq];
       const noiseFloor = getNoiseFloor(freq, ear);
       
-      // ルール判定
-      // 1. 中耳疾患がある（ティンパノB型）→ SNR < 2dB
-      // 2. AC ≥ 35dB → SNR < 2dB
-      // 3. OME（C型またはB型）でAC > 20dB → SNR < 2dB（B型）またはSNR <= 6dB（C型）
-      // 4. OME（C型またはB型）でAC <= 20dB → SNR >= 6dB（正常/PASS）
+      // ルール判定（優先順位順）
+      // 【最重要】伝音障害（B型）がある場合は、AC閾値に関係なく全周波数でREFERを最優先
+      // 1. 伝音障害（ティンパノB型）→ 全周波数でSNR < 2dB（REFER）
+      // 2. OME軽度（C型）でAC <= 20dB → SNR >= 6dB（正常/PASS）
+      // 3. OME（C型またはB型）でAC > 20dB → SNR < 2dB（B型）またはSNR < 6dB（C型軽度）
+      // 4. AC ≥ 35dB（感音性難聴など）→ SNR < 2dB
       // 5. それ以外 → 正常（SNR 6〜12dB、確実に6以上になるように）
       
       // OME軽度/中程度の判定
@@ -857,26 +874,14 @@ function generateDPOAEData(dpoaeConfig, caseId = '') {
       const isOME = tympanogramType === 'C' || tympanogramType === 'B';
       
       let snr;
-      if (tympanogramType === 'B' && (!isOME || (isOME && acThreshold !== undefined && acThreshold > 20))) {
-        // 異常: SNR < 2dB（固定値: 約1dB）
-        // B型（中程度以上のOMEまたはその他の伝音障害）で、OMEの場合はAC > 20dB
-        // 症例と周波数に基づく固定値で、右左で差が出るように
+      // 【最優先】伝音障害（B型）がある場合は、AC閾値に関係なく全周波数でREFER
+      if (tympanogramType === 'B') {
+        // B型（伝音障害）→ 全周波数でSNR < 2dB（REFER）
+        // AC閾値に関係なく、伝音障害がある場合は必ずREFER
         const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
         snr = 0.5 + (Math.sin(seed * 0.1) * 0.5 + Math.cos(seed * 0.2) * 0.3); // 0.5〜1.5dB程度の固定値
-      } else if (isOME && acThreshold !== undefined && acThreshold > 20) {
-        // OME（C型またはB型）でAC > 20dB → REFER
-        if (tympanogramType === 'C' && isMildOME) {
-          // OME軽度（C型）でAC > 20dB → SNR < 6dB（6dB未満でREFER）
-          const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
-          snr = 2 + (Math.sin(seed * 0.1) * 2 + Math.cos(seed * 0.2) * 1.5); // 2〜5.5dB程度の固定値
-          snr = Math.max(2, Math.min(5.5, snr)); // 6dB未満に制限（REFERになるように）
-        } else {
-          // OME中程度以上（B型）でAC > 20dB → SNR < 2dB
-          const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
-          snr = 0.5 + (Math.sin(seed * 0.1) * 0.5 + Math.cos(seed * 0.2) * 0.3); // 0.5〜1.5dB程度の固定値
-        }
-      } else if (isOME && acThreshold !== undefined && acThreshold <= 20) {
-        // OME（C型またはB型）でAC <= 20dB → SNR >= 6dB（正常/PASS）
+      } else if (tympanogramType === 'C' && isMildOME && acThreshold !== undefined && acThreshold <= 20) {
+        // OME軽度（C型）でAC <= 20dB → SNR >= 6dB（正常/PASS）
         // 確実に6dB以上になるように、最小値を6.5dBに設定
         const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
         // SNR 6.5〜12dBの範囲で生成（確実に6以上になるように）
@@ -885,8 +890,20 @@ function generateDPOAEData(dpoaeConfig, caseId = '') {
           ? Math.sin(seed * 0.05) * 2.5  // 右耳の変動幅を大きく
           : Math.cos(seed * 0.05) * 2.5; // 左耳の変動幅を大きく
         snr = Math.max(6.5, Math.min(12, baseSNR + earOffset)); // 最小値を6.5dBに設定して確実に6dB以上にする
+      } else if (isOME && acThreshold !== undefined && acThreshold > 20) {
+        // OME（C型またはB型）でAC > 20dB → REFER
+        if (tympanogramType === 'C' && isMildOME) {
+          // OME軽度（C型）でAC > 20dB → SNR < 6dB（6dB未満でREFER）
+          const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
+          snr = 2 + (Math.sin(seed * 0.1) * 2 + Math.cos(seed * 0.2) * 1.5); // 2〜5.5dB程度の固定値
+          snr = Math.max(2, Math.min(5.5, snr)); // 6dB未満に制限（REFERになるように）
+        } else {
+          // OME中程度以上（B型）でAC > 20dB → SNR < 2dB（ただし、B型は既に上で処理済み）
+          const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
+          snr = 0.5 + (Math.sin(seed * 0.1) * 0.5 + Math.cos(seed * 0.2) * 0.3); // 0.5〜1.5dB程度の固定値
+        }
       } else if (acThreshold !== undefined && acThreshold >= 35) {
-        // AC >= 35dB（OME以外）→ SNR < 2dB
+        // AC >= 35dB（感音性難聴など）→ SNR < 2dB
         const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
         snr = 0.5 + (Math.sin(seed * 0.1) * 0.5 + Math.cos(seed * 0.2) * 0.3); // 0.5〜1.5dB程度の固定値
       } else {
@@ -1095,8 +1112,36 @@ export default function AudiogramMaskingMVP() {
   // 学生IDログイン管理
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [studentId, setStudentId] = useState('');
-  const [currentStudentId, setCurrentStudentId] = useState(null);
+  const [currentStudentId, setCurrentStudentId] = useState(() => {
+    // sessionStorageから学生IDを復元
+    try {
+      const saved = sessionStorage.getItem('hearsim_student_id');
+      return saved || null;
+    } catch (e) {
+      return null;
+    }
+  });
   const [isLoadingLogin, setIsLoadingLogin] = useState(false);
+
+  // sessionStorageから学生IDを復元して自動ログイン
+  useEffect(() => {
+    const savedStudentId = sessionStorage.getItem('hearsim_student_id');
+    if (savedStudentId && !isAuthenticated) {
+      // 自動ログイン処理
+      setStudentId(savedStudentId);
+      setCurrentStudentId(savedStudentId);
+      setIsAuthenticated(true);
+    }
+  }, [isAuthenticated]); // isAuthenticatedが変更された時のみ実行
+
+  // ログイン状態がtrueになった時に進捗データを読み込む
+  useEffect(() => {
+    if (isAuthenticated && currentStudentId) {
+      loadStudentProgress(currentStudentId).catch(err => {
+        console.warn('進捗データの自動読み込みエラー:', err);
+      });
+    }
+  }, [isAuthenticated, currentStudentId]); // isAuthenticatedとcurrentStudentIdが変更された時のみ実行
 
   // Basic UI state
   const [ear, setEar] = useState('R'); // 'R' | 'L'
@@ -1312,6 +1357,13 @@ export default function AudiogramMaskingMVP() {
       // ログイン成功（テーブルがなくてもローカルで動作）
       setCurrentStudentId(normalizedStudentId);
       setIsAuthenticated(true);
+      
+      // sessionStorageに学生IDを保存（ティンパノグラムビューアから戻った時に自動ログインするため）
+      try {
+        sessionStorage.setItem('hearsim_student_id', normalizedStudentId);
+      } catch (e) {
+        console.warn('sessionStorageへの保存に失敗:', e);
+      }
       
       // 学生IDに紐づく進捗データを読み込む（テーブルが存在する場合のみ）
       try {
@@ -1549,11 +1601,14 @@ export default function AudiogramMaskingMVP() {
         }
       });
 
+      // 年齢を10代ごとにグループ化
+      const ageGroup = generatedAge ? getAgeGroup(generatedAge) : '';
+
       // プロンプトを作成
       const prompt = `あなたは聴覚検査の教育用シミュレーションアプリケーションの開発者です。以下のオーディオグラムデータから、臨床的に自然で教育的な症例情報を生成してください。
 
 【オーディオグラムデータ】
-年齢: ${generatedAge}歳
+年齢: ${ageGroup || (generatedAge ? `${generatedAge}歳` : '')}
 難聴パターン: ${casePattern === 'normal' ? '正常聴力' : casePattern === 'sensorineural' ? '感音性難聴' : casePattern === 'conductive' ? '伝音性難聴' : '混合性難聴'}
 右耳AC: ${JSON.stringify(audiogramData.right.AC)}
 右耳BC: ${JSON.stringify(audiogramData.right.BC)}
@@ -1682,6 +1737,33 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       setMeasurementLog(logs);
     } catch {}
   }
+  // 年齢を10代ごとにグループ化する関数
+  const getAgeGroup = (age) => {
+    if (age <= 10) return '10歳以下';
+    if (age >= 11 && age <= 19) return '10代';
+    if (age >= 20 && age <= 29) return '20代';
+    if (age >= 30 && age <= 39) return '30代';
+    if (age >= 40 && age <= 49) return '40代';
+    if (age >= 50 && age <= 59) return '50代';
+    if (age >= 60 && age <= 69) return '60代';
+    if (age >= 70) return '70代';
+    // フォールバック
+    return `${age}歳`;
+  };
+
+  // 年齢からISO7029用の年齢グループを取得する関数（10歳以下は20代のデータを使用）
+  const getISOAgeGroup = (age) => {
+    if (age <= 10) return '20s'; // 10歳以下は20代のISOデータを使用
+    if (age >= 11 && age <= 19) return '20s'; // 10代も20代のISOデータを使用
+    if (age >= 20 && age <= 29) return '20s';
+    if (age >= 30 && age <= 39) return '30s';
+    if (age >= 40 && age <= 49) return '40s';
+    if (age >= 50 && age <= 59) return '50s';
+    if (age >= 60 && age <= 69) return '60s';
+    if (age >= 70) return '70s';
+    return '20s'; // デフォルトは20代
+  };
+
   // AI生成: 症例の詳細情報を生成する関数（非同期版：OpenAI統合）
   const generateCaseDetails = async (generatedTargets, casePattern, generatedAge = null, patternAnalysis = null) => {
     // まず Tym 作成 → タイプ分類 → 症例検索（文面取得）
@@ -1881,10 +1963,14 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       tympanogramObj = buildTympanogramFromType(tympTypeStr);
     }
 
+    // 年齢を10代ごとにグループ化
+    const ageGroup = getAgeGroup(age);
+
     // 返却
     return {
       caseId: 'AI生成',
-      age: `${age}歳`,
+      age: ageGroup, // 年齢グループをageフィールドに設定（具体的な年齢ではなく）
+      ageGroup: ageGroup, // 10代ごとのグループ化された年齢を追加
       gender: genGender,
       chiefComplaint: genChiefComplaint,
       otoscopy: genOtoscopy,
@@ -1893,7 +1979,8 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       meta: {
         ...(tympanogramObj?.meta || {}),
         isOMECase,
-        generatedTargets // AC値を後で参照できるように保存
+        generatedTargets, // AC値を後で参照できるように保存
+        ageGroup: ageGroup // metaにも保存
       }
     };
     
@@ -2030,7 +2117,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       if (Math.random() > 0.5) {
         selectedDisorder = patternAnalysis.possibleDisorders[0].disorder;
         
-        // 疾患に基づいてタインパノグラム型を設定（疾患情報を優先）
+        // 疾患に基づいてティンパノグラム型を設定（疾患情報を優先）
         if (casePattern === 'conductive') {
           if (selectedDisorder.name === '耳硬化症') {
             pattern.tympType = 'As'; // 耳硬化症はAs型
@@ -2334,7 +2421,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
           pattern.tympType = 'Ad';
         }
     }
-    // タインパノグラム生成
+    // ティンパノグラム生成
     let tympanogram;
     if (pattern.tympType === 'A' || pattern.tympType === 'As') {
       // A型（正常）またはAs型（コンプライアンス低：耳硬化症など）
@@ -3278,22 +3365,100 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       if (!meta.rightProfile) meta.rightProfile = profileName;
       if (!meta.leftProfile) meta.leftProfile = profileName;
       const casePatternForTests = inferCasePatternFromProfile(profileName);
+      
+      // profileNameから疾患タイプを抽出
+      const extractDiseaseFromProfile = (profile) => {
+        if (!profile || profile === 'Normal') return null;
+        const upperProfile = profile.toUpperCase();
+        if (upperProfile.includes('AOM') || upperProfile.includes('CHL_AOM')) return 'AOM';
+        if (upperProfile.includes('OME') || upperProfile.includes('CHL_OME')) return 'OME';
+        if (upperProfile.includes('OTOSCLEROSIS') || upperProfile.includes('CHL_OTOSCLEROSIS')) return 'OTOSCLEROSIS';
+        if (upperProfile.includes('OSSICULAR') || upperProfile.includes('DISCONTINUITY')) return 'OSSICULAR_DISCONTINUITY';
+        if (upperProfile.includes('MUMPS')) return 'MUMPS';
+        if (upperProfile.includes('SUDDEN')) return 'SUDDEN';
+        if (upperProfile.includes('MENIERE')) return 'MENIERE';
+        if (upperProfile.includes('NOISE')) return 'NOISE';
+        if (upperProfile.includes('PRESBYCUSIS')) return 'PRESBYCUSIS';
+        if (upperProfile.includes('ACOUSTIC_TRAUMA')) return 'ACOUSTIC_TRAUMA';
+        return null;
+      };
+      
+      const diseaseKey = extractDiseaseFromProfile(profileName);
+      
+      // 年齢を数値に変換（ageGroupから年齢を推定）
+      let generatedAge = null;
+      if (ageLabel) {
+        const ageMatch = ageLabel.match(/(\d+)/);
+        if (ageMatch) {
+          generatedAge = parseInt(ageMatch[1]);
+        }
+      }
+      // 年齢が取得できない場合はデフォルト値を設定
+      if (!generatedAge) {
+        generatedAge = casePatternForTests === 'normal' ? 30 : casePatternForTests === 'sensorineural' ? 50 : 40;
+      }
+      
+      // 難聴パターンを分析
+      const patternAnalysis = analyzeHearingLossPattern(targets, generatedAge);
+      
+      // データベースから症例情報を取得（疾患タイプを優先的に使用）
+      let dbCase = null;
+      if (diseaseKey) {
+        // ティンパノグラム型を推定
+        const simpleTymp = buildSimpleTympanogramFromProfile(profileName, meta);
+        const tympType = simpleTymp?.type || (casePatternForTests === 'conductive' ? 'B' : 'A');
+        dbCase = pickCaseFromDatabaseSync(diseaseKey, tympType);
+        console.log('データベースから症例取得:', { diseaseKey, tympType, dbCase });
+      }
+      
+      // データベースから症例情報を取得できた場合は、それを優先的に使用
+      let caseDetails;
       const simpleTympanogram = buildSimpleTympanogramFromProfile(profileName, meta);
+      if (dbCase && dbCase.chiefComplaint) {
+        // データベースから症例情報を取得できた場合は、それを直接使用
+        const dbAge = dbCase.age_min && dbCase.age_max ? Math.floor((dbCase.age_min + dbCase.age_max) / 2) : generatedAge;
+        const dbAgeGroup = dbAge ? getAgeGroup(dbAge) : ageLabel;
+        caseDetails = {
+          chiefComplaint: dbCase.chiefComplaint,
+          otoscopy: dbCase.otoscopy || '鼓膜所見正常',
+          gender: dbCase.gender || genderLabel,
+          age: dbAgeGroup, // 年齢グループをageフィールドに設定
+          ageGroup: dbAgeGroup,
+          tympanogram: simpleTympanogram,
+          explanation: ''
+        };
+      } else {
+        // データベースから症例情報を取得できない場合は、generateCaseDetailsを呼び出す
+        caseDetails = await generateCaseDetails(targets, casePatternForTests, generatedAge, patternAnalysis);
+        // generateCaseDetailsが返すtympanogramがない場合は、simpleTympanogramを使用
+        if (!caseDetails.tympanogram) {
+          caseDetails.tympanogram = simpleTympanogram;
+        }
+        // ageフィールドを年齢グループに変更
+        if (caseDetails.ageGroup) {
+          caseDetails.age = caseDetails.ageGroup;
+        } else if (generatedAge) {
+          caseDetails.age = getAgeGroup(generatedAge);
+        }
+      }
       const artConfig = buildArtConfig(targets, simpleTympanogram, profileName, casePatternForTests, meta);
       const dpoaeConfig = buildDPOAEConfig(targets, simpleTympanogram);
+      // 年齢グループを確定
+      const finalAgeGroup = caseDetails.ageGroup || (generatedAge ? getAgeGroup(generatedAge) : ageLabel);
       const caseInfo = {
         caseId: 'AI生成',
         meta,
         casePattern: casePatternForTests,
-        gender: genderLabel,
-        age: ageLabel,
+        gender: caseDetails.gender || genderLabel,
+        age: finalAgeGroup, // 年齢グループをageフィールドに設定
+        ageGroup: finalAgeGroup,
         disorderType: profileName,
         disorderLabel: profileName,
         rightProfile: meta.rightProfile,
         leftProfile: meta.leftProfile,
-        chiefComplaint: '聞こえにくさを自覚',
-        otoscopy: '鼓膜所見正常',
-        explanation: '',
+        chiefComplaint: caseDetails.chiefComplaint || '聞こえにくさを自覚',
+        otoscopy: caseDetails.otoscopy || '鼓膜所見正常',
+        explanation: caseDetails.explanation || '',
         tympanogram: simpleTympanogram,
         artConfig,
         dpoaeConfig,
@@ -4097,9 +4262,10 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
     }
 
     const baseAlpha = clamp((maskLevel + 15) / (Y_MAX - Y_MIN + 15), 0, 1);
-    let fill = 'rgba(59,130,246,0.25)'; // blue
+    // 測定耳に応じて色を変更：右耳（R）はブルー、左耳（L）はレッド
+    let fill = ear === 'R' ? 'rgba(59,130,246,0.25)' : 'rgba(239,68,68,0.25)'; // R: blue, L: red
     let fillOpacity = clamp(0.18 + baseAlpha * 0.4, 0.18, 0.65);
-    let lineColor = '#1d4ed8';
+    let lineColor = ear === 'R' ? '#1d4ed8' : '#dc2626'; // R: blue, L: red
 
     if (crossHearingInfo.isCrossHearing) {
       fill = 'rgba(249,115,22,0.32)'; // orange
@@ -4644,10 +4810,24 @@ ${targets.map((target, index) => {
           <div className="flex gap-2">
             <button
               onClick={() => {
+                window.location.href = '/?view=tympanogram';
+              }}
+              className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              ティンパノグラム症例ビューア
+            </button>
+            <button
+              onClick={() => {
                 if (window.confirm('ログアウトしますか？進捗状況は保存されています。')) {
                   setIsAuthenticated(false);
                   setCurrentStudentId(null);
                   setStudentId('');
+                  // sessionStorageからも削除
+                  try {
+                    sessionStorage.removeItem('hearsim_student_id');
+                  } catch (e) {
+                    console.warn('sessionStorageからの削除に失敗:', e);
+                  }
                 }
               }}
               className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
@@ -4860,11 +5040,35 @@ ${targets.map((target, index) => {
                   <p className="text-sm text-gray-700">{currentCaseInfo.chiefComplaint}</p>
                 </div>
 
+                {/* 病歴 */}
+                {currentCaseInfo.history && (
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <h4 className="text-sm font-semibold text-green-800 mb-2">病歴</h4>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{currentCaseInfo.history}</p>
+                  </div>
+                )}
+
                 {/* 鼓膜所見 */}
                 <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
                   <h4 className="text-sm font-semibold text-purple-800 mb-2">鼓膜所見</h4>
-                  <p className="text-sm text-gray-700">{currentCaseInfo.otoscopy}</p>
+                  <p className="text-sm text-gray-700">{currentCaseInfo.findings || currentCaseInfo.otoscopy || '記載なし'}</p>
                 </div>
+
+                {/* 診断情報（ある場合） */}
+                {currentCaseInfo.diagnosis && (
+                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                    <h4 className="text-sm font-semibold text-red-800 mb-2">診断</h4>
+                    <p className="text-sm text-gray-700 font-medium">{currentCaseInfo.diagnosis}</p>
+                  </div>
+                )}
+
+                {/* 疾患名（ある場合） */}
+                {currentCaseInfo.diseaseName && (
+                  <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+                    <h4 className="text-sm font-semibold text-indigo-800 mb-2">推定疾患</h4>
+                    <p className="text-sm text-gray-700 font-medium">{currentCaseInfo.diseaseName}</p>
+                  </div>
+                )}
 
                 {/* 学習ポイント（OpenAI生成の場合のみ表示） */}
                 {currentCaseInfo.explanation && (
@@ -4943,7 +5147,7 @@ ${targets.map((target, index) => {
             <div className="bg-white rounded-2xl shadow-lg p-6 max-w-[95vw] w-full mx-4 max-h-[95vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-2xl font-bold text-orange-800">DPOAE検査</h3>
+                  <h3 className="text-2xl font-bold text-orange-800">DPOAE実施</h3>
                   <p className="text-sm text-gray-600 mt-1">症例{currentCaseInfo?.caseId}（プリセット症例）</p>
                 </div>
                 <div className="flex gap-2">
@@ -4995,7 +5199,7 @@ ${targets.map((target, index) => {
             <div className="bg-white rounded-2xl shadow-lg p-6 max-w-[95vw] w-full mx-4 max-h-[95vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-2xl font-bold text-orange-800">DPOAE検査</h3>
+                  <h3 className="text-2xl font-bold text-orange-800">DPOAE実施</h3>
                   <p className="text-sm text-gray-600 mt-1">AI生成症例</p>
                 </div>
                 <div className="flex gap-2">
@@ -5165,9 +5369,9 @@ ${targets.map((target, index) => {
                 }
               }}
               className="px-3 py-2 rounded-xl text-white text-sm bg-orange-600 hover:bg-orange-700 flex items-center gap-2"
-              title="DPOAE検査を表示"
+              title="DPOAE実施"
             >
-              📈 DPOAE
+              📈 DPOAE実施
             </button>
           </div>
         </div>
@@ -5264,9 +5468,9 @@ ${targets.map((target, index) => {
               <button
                 onClick={() => setShowDPOAE(true)}
                 className="px-3 py-2 rounded-xl text-white text-sm bg-orange-600 hover:bg-orange-700 flex items-center gap-2"
-                title="DPOAE検査を表示（AI生成症例）"
+                title="DPOAE実施"
               >
-                DPOAE検査を見る
+                DPOAE実施
               </button>
             )}
             {currentCaseInfo?.caseId === 'AI生成' && (
