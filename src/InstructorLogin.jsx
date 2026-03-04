@@ -144,7 +144,7 @@ export default function InstructorLogin({ onLogin }) {
     <div className="w-full min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full mx-4">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">HearSim - 講師用ダッシュボード</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Audioscope EDU - 講師用ダッシュボード</h1>
           <p className="text-gray-600">講師IDとパスワードでログインしてください</p>
         </div>
         

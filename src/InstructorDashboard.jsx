@@ -205,7 +205,7 @@ export default function InstructorDashboard({ instructor, onLogout }) {
         <header className="bg-white rounded-2xl shadow p-6 mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">HearSim - 講師用ダッシュボード</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Audioscope EDU - 講師用ダッシュボード</h1>
               <p className="text-sm text-gray-600 mt-1">講師: {instructor.name}</p>
             </div>
             <div className="flex items-center gap-4">
@@ -544,4 +544,11 @@ export default function InstructorDashboard({ instructor, onLogout }) {
     </div>
   );
 }
+
+
+
+
+
+
+
 

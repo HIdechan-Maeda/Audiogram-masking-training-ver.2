@@ -4,7 +4,7 @@ const PptxGenJS = require('pptxgenjs');
 
 // Markdownファイルを読み込む
 const markdownContent = fs.readFileSync(
-  path.join(__dirname, 'HearSim_特許提案資料.md'),
+  path.join(__dirname, 'AudioscopeEDU_特許提案資料.md'),
   'utf-8'
 );
 
@@ -88,7 +88,7 @@ slides.forEach((slide, index) => {
 });
 
 // ファイルを保存
-const outputPath = path.join(__dirname, 'HearSim_特許提案資料.pptx');
+const outputPath = path.join(__dirname, 'AudioscopeEDU_特許提案資料.pptx');
 pptx.writeFile(outputPath)
   .then(() => {
     console.log(`✅ PowerPointファイルを作成しました: ${outputPath}`);
@@ -96,6 +96,13 @@ pptx.writeFile(outputPath)
   .catch(err => {
     console.error('❌ エラーが発生しました:', err);
   });
+
+
+
+
+
+
+
 
 
 

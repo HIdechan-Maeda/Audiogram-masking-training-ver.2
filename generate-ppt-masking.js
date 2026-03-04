@@ -3,7 +3,7 @@ const path = require('path');
 const PptxGenJS = require('pptxgenjs');
 
 // 読み込むMarkdownファイル
-const markdownPath = path.join(__dirname, 'HearSim_マスキング訓練プレゼン.md');
+const markdownPath = path.join(__dirname, 'AudioscopeEDU_マスキング訓練プレゼン.md');
 const markdownContent = fs.readFileSync(markdownPath, 'utf-8');
 
 // スライドごとに分割
@@ -111,7 +111,7 @@ slides.forEach((slide, index) => {
   });
 });
 
-const outputPath = path.join(__dirname, 'HearSim_マスキング訓練プレゼン.pptx');
+const outputPath = path.join(__dirname, 'AudioscopeEDU_マスキング訓練プレゼン.pptx');
 
 pptx.writeFile(outputPath)
   .then(() => {

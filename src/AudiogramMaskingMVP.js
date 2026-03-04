@@ -1115,7 +1115,7 @@ export default function AudiogramMaskingMVP() {
   const [currentStudentId, setCurrentStudentId] = useState(() => {
     // sessionStorageから学生IDを復元
     try {
-      const saved = sessionStorage.getItem('hearsim_student_id');
+      const saved = sessionStorage.getItem('audioscope_edu_student_id');
       return saved || null;
     } catch (e) {
       return null;
@@ -1125,7 +1125,7 @@ export default function AudiogramMaskingMVP() {
 
   // sessionStorageから学生IDを復元して自動ログイン
   useEffect(() => {
-    const savedStudentId = sessionStorage.getItem('hearsim_student_id');
+    const savedStudentId = sessionStorage.getItem('audioscope_edu_student_id');
     if (savedStudentId && !isAuthenticated) {
       // 自動ログイン処理
       setStudentId(savedStudentId);
@@ -1360,7 +1360,7 @@ export default function AudiogramMaskingMVP() {
       
       // sessionStorageに学生IDを保存（ティンパノグラムビューアから戻った時に自動ログインするため）
       try {
-        sessionStorage.setItem('hearsim_student_id', normalizedStudentId);
+        sessionStorage.setItem('audioscope_edu_student_id', normalizedStudentId);
       } catch (e) {
         console.warn('sessionStorageへの保存に失敗:', e);
       }
@@ -4543,7 +4543,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       Math.round(completedCases.reduce((sum, caseId) => sum + learningProgress.caseAccuracy[caseId].accuracy, 0) / completedCases.length) : 0;
     
     const reportData = {
-      title: 'HearSim 学習レポート',
+      title: 'Audioscope EDU 学習レポート',
       date: new Date().toLocaleDateString('ja-JP'),
       completedCases: completedCases.length,
       totalCases: 8,
@@ -4564,7 +4564,7 @@ ${patternAnalysis?.possibleDisorders?.length > 0 ? `その他の可能性: ${pat
       <!DOCTYPE html>
       <html>
       <head>
-        <title>HearSim 測定レポート</title>
+        <title>Audioscope EDU 測定レポート</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; }
           .header { background: #f0f0f0; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
@@ -4765,7 +4765,7 @@ ${targets.map((target, index) => {
       <div className="w-full min-h-screen flex items-center justify-center bg-gray-50">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full mx-4">
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">HearSim - オーディオグラム演習</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Audioscope EDU - オーディオグラム演習</h1>
             <p className="text-gray-600">学生IDを入力してログインしてください</p>
           </div>
           <div className="space-y-4">
@@ -4802,12 +4802,12 @@ ${targets.map((target, index) => {
       <div className="max-w-7xl mx-auto grid gap-6">
         <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">HearSim (Hearing Simulator)</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">Audioscope EDU</h1>
             <p className="text-sm text-gray-600 mt-1">
               学生ID: <span className="font-semibold text-blue-600">{currentStudentId}</span> - 進捗状況は自動保存されます
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => {
                 window.location.href = '/?view=tympanogram';
@@ -4818,13 +4818,21 @@ ${targets.map((target, index) => {
             </button>
             <button
               onClick={() => {
+                window.location.href = '/?view=epidemiology';
+              }}
+              className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+            >
+              疫学データビューア
+            </button>
+            <button
+              onClick={() => {
                 if (window.confirm('ログアウトしますか？進捗状況は保存されています。')) {
                   setIsAuthenticated(false);
                   setCurrentStudentId(null);
                   setStudentId('');
                   // sessionStorageからも削除
                   try {
-                    sessionStorage.removeItem('hearsim_student_id');
+                    sessionStorage.removeItem('audioscope_edu_student_id');
                   } catch (e) {
                     console.warn('sessionStorageからの削除に失敗:', e);
                   }

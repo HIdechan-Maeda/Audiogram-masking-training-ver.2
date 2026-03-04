@@ -31,6 +31,11 @@ export default function StapedialReflexGif({
 
   // propsで渡された設定を使用、なければデフォルト
   const HEARING_CONFIG = hearingConfig || DEFAULT_HEARING_CONFIG;
+  
+  // デバッグログ
+  if (hearingConfig) {
+    console.log('StapedialReflexGif received hearingConfig:', JSON.stringify(hearingConfig, null, 2));
+  }
 
   // 周波数ごとの正常反射閾値設定（文献値）
   const NORMAL_THRESHOLDS = {
@@ -54,16 +59,22 @@ export default function StapedialReflexGif({
     const measuredConfig = measuredEar === 'right' ? HEARING_CONFIG.right : HEARING_CONFIG.left;
     
     const overrideKey = isIpsi ? 'ipsilateralOverride' : 'contralateralOverride';
+    
+    // 測定側のoverrideを優先的に確認（AOM症例などで正常側のCONT反射を上昇させる場合など）
     const overrideMeasured = measuredConfig?.[overrideKey]?.[freq];
     if (overrideMeasured !== undefined) {
+      console.log(`ART override (measured): ${measuredEar} ${overrideKey}[${freq}] = ${overrideMeasured}`);
       return overrideMeasured;
     }
 
+    // 刺激側のoverrideも確認
     const overrideStimulus = stimulusConfig?.[overrideKey]?.[freq];
     if (overrideStimulus !== undefined) {
+      console.log(`ART override (stimulus): ${stimulusEar} ${overrideKey}[${freq}] = ${overrideStimulus}`);
       return overrideStimulus;
     }
     
+    // overrideが設定されていない場合のみ、ティンパノグラム型で判定
     // 伝音障害の判定：ティンパノグラムB型は伝音障害を示す
     // 測定側が伝音障害（B型）なら反射消失
     if (measuredConfig.tympanogramType === 'B') {
@@ -71,6 +82,8 @@ export default function StapedialReflexGif({
     }
     
     // 刺激側が伝音障害（B型）なら反射消失
+    // ただし、AOM症例などで正常側のCONT反射はoverrideで上昇させているため、
+    // overrideが設定されていれば上記で既に返されている
     if (stimulusConfig.tympanogramType === 'B') {
       return 999; // 反射消失
     }

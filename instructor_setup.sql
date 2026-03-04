@@ -57,3 +57,10 @@ CREATE INDEX IF NOT EXISTS idx_instructor_logs_created_at ON instructor_logs(cre
 --
 -- 注意: 本番環境では、パスワードをbcryptなどでハッシュ化してください
 
+
+
+
+
+
+
+

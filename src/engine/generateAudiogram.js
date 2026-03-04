@@ -46,14 +46,42 @@ import ISO_DATA from "../data/iso7029_age_hearing_thresholds_2sd.json";
 const ISO7029 = ISO_DATA;
 
 function normalizeAgeGroupForISO(sex, age) {
-  if (ISO7029[sex] && ISO7029[sex][age]) return age;
-  // 簡略版テーブルのフォールバック（30s→20s, 40s→50s）
-  const map = { "30s": "20s", "40s": "50s" };
-  const cand = map[age] || age;
-  if (ISO7029[sex] && ISO7029[sex][cand]) return cand;
-  // 最後の保険: 利用可能な最初の年代
+  // ステップ1: 10歳以下や日本語の年齢グループをISO形式に変換
+  if (age === "10歳以下" || age === "10s" || (typeof age === 'string' && age.includes('10歳以下'))) {
+    return "20s"; // 10歳以下は20代のISOデータを使用
+  }
+  
+  // 日本語の年齢グループをISO形式に変換
+  if (typeof age === 'string') {
+    const ageMap = {
+      "10代": "20s",  // 10代も20代のISOデータを使用
+      "20代": "20s",
+      "30代": "30s",
+      "40代": "40s",
+      "50代": "50s",
+      "60代": "60s",
+      "70代": "70s"
+    };
+    if (ageMap[age]) {
+      age = ageMap[age];
+    }
+  }
+  
+  // ステップ2: ISO7029データに存在するか確認
+  if (ISO7029[sex] && ISO7029[sex][age]) {
+    return age;
+  }
+  
+  // ステップ3: フォールバック処理（30s→20s, 40s→50s）
+  const fallbackMap = { "30s": "20s", "40s": "50s" };
+  const fallbackAge = fallbackMap[age] || age;
+  if (ISO7029[sex] && ISO7029[sex][fallbackAge]) {
+    return fallbackAge;
+  }
+  
+  // ステップ4: 最後の保険: 利用可能な最初の年代（デフォルトは20代）
   const available = ISO7029[sex] ? Object.keys(ISO7029[sex]) : [];
-  return available.length ? available[0] : age;
+  return available.length ? available[0] : "20s";
 }
 
 const getBand = (sex, age, f) => {
@@ -78,10 +106,11 @@ function randNormal(rand, mean, sd) {
   return mean + sd * z;
 }
 
-// 右耳ベース生成（デモのNormal基盤 + 5dB丸め + 上下限）
+// 右耳ベース生成（ISO7029データから性別・年齢グループに基づいて生成 + 5dB丸め + 上下限）
+// この関数は性別と年齢グループからISO7029データを参照してオージオグラムのベースを生成する
 function generateEarBase(rand, sex, age) {
   return FREQS.map((f, idx) => {
-    const b = getBand(sex, age, f);
+    const b = getBand(sex, age, f); // ISO7029データから性別・年齢グループに基づく閾値を取得
     const sdApprox = (b.plus2SD - b.median) / 2;
     const noisy = randNormal(rand, b.median, sdApprox * 0.5) * (0.9 + 0.2 * rand());
     const clipped = Math.max(b.minus2SD, Math.min(b.plus2SD, noisy));
@@ -252,8 +281,40 @@ function weightedRandomPick(rand, items) {
 export function generateAudiogram(opts = {}) {
   const seed = (opts.seed != null ? opts.seed : Math.floor(Math.random() * 1e9)) >>> 0;
   const rand = makeRng(seed);
+  
+  // ステップ1: 性別と年齢グループを決定（これが最初のステップ）
   const sex = opts.sex || randomPick(rand, SEXES);
-  const ageGroup = opts.ageGroup || randomPick(rand, AGE_GROUPS);
+  let ageGroup = opts.ageGroup;
+  
+  // 年齢グループの処理：数値で渡された場合はISO用の年齢グループに変換
+  if (typeof ageGroup === 'number') {
+    // 数値の年齢が渡された場合、ISO用の年齢グループに変換
+    if (ageGroup <= 10) {
+      ageGroup = '20s'; // 10歳以下は20代のISOデータを使用
+    } else if (ageGroup <= 19) {
+      ageGroup = '20s'; // 10代も20代のISOデータを使用
+    } else if (ageGroup <= 29) {
+      ageGroup = '20s';
+    } else if (ageGroup <= 39) {
+      ageGroup = '30s';
+    } else if (ageGroup <= 49) {
+      ageGroup = '40s';
+    } else if (ageGroup <= 59) {
+      ageGroup = '50s';
+    } else if (ageGroup <= 69) {
+      ageGroup = '60s';
+    } else {
+      ageGroup = '70s';
+    }
+  } else if (!ageGroup) {
+    // 年齢グループが指定されていない場合はランダムに選択
+    ageGroup = randomPick(rand, AGE_GROUPS);
+  }
+  
+  // 年齢グループをISO用に正規化（日本語の年齢グループや10歳以下をISO形式に変換）
+  ageGroup = normalizeAgeGroupForISO(sex, ageGroup);
+  
+  // ステップ2: プロファイルと重症度を決定
   const profile = opts.profile || randomPick(rand, PROFILES);
   let severity = opts.severity != null ? opts.severity : Math.floor(rand() * 4);
 
@@ -266,8 +327,11 @@ export function generateAudiogram(opts = {}) {
     severity = 1;
   }
 
-  // 右耳ベース
+  // ステップ3: 性別と年齢グループからISO7029データを参照してオージオグラムのベースを生成
+  // これが最初のオージオグラム作成ステップ（年代・性別からISOデータを見て作成）
   let right = generateEarBase(rand, sex, ageGroup);
+  
+  // ステップ4: プロファイル（疾患パターン）を適用して難聴パターンを追加
   right = applyProfileTransform(rand, right, profile, severity, seed, sex, ageGroup);
 
   let left;

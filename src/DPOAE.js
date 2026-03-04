@@ -33,7 +33,7 @@ export default function DPOAE({
   const frequencies = [1, 2, 3, 4, 6, 8];
   
   // 音声生成・再生用
-  const initializeAudioContext = () => {
+  const initializeAudioContext = async () => {
     if (!audioContextRef.current) {
       try {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -42,12 +42,20 @@ export default function DPOAE({
         return null;
       }
     }
+    // AudioContextがsuspended状態の場合はresumeする
+    if (audioContextRef.current.state === 'suspended') {
+      try {
+        await audioContextRef.current.resume();
+      } catch (e) {
+        console.error('AudioContext resumeエラー:', e);
+      }
+    }
     return audioContextRef.current;
   };
 
   // 純音を生成して再生
-  const playTone = (freq, duration, volume = 0.3) => {
-    const ctx = initializeAudioContext();
+  const playTone = async (freq, duration, volume = 0.3) => {
+    const ctx = await initializeAudioContext();
     if (!ctx) return null;
 
     const oscillator = ctx.createOscillator();
@@ -72,16 +80,16 @@ export default function DPOAE({
   };
 
   // f1とf2の2つの純音を同時に再生
-  const playDPOAETones = (f2Freq, duration = 0.5, volume = 0.2) => {
+  const playDPOAETones = async (f2Freq, duration = 0.5, volume = 0.2) => {
     const f1Freq = f2Freq / 1.22; // f2/f1 = 1.22 より f1 = f2 / 1.22
     const nodes = [];
     
     // f1を再生
-    const node1 = playTone(f1Freq * 1000, duration, volume);
+    const node1 = await playTone(f1Freq * 1000, duration, volume);
     if (node1) nodes.push(node1);
     
     // f2を再生
-    const node2 = playTone(f2Freq * 1000, duration, volume);
+    const node2 = await playTone(f2Freq * 1000, duration, volume);
     if (node2) nodes.push(node2);
     
     return nodes;
@@ -394,13 +402,16 @@ export default function DPOAE({
   }, [width, height, xMin, xMax, yMin, yMax, data, noiseFloor, chartWidth, animationComplete, measuredCount]);
 
   // アニメーション再生
-  function playAnimation() {
+  async function playAnimation() {
     setIsPlaying(true);
     setAnimationComplete(false); // アニメーション開始時にリセット
     setMeasuredCount(0); // 測定済み周波数をリセット
     
     // 既存の音声を停止
     stopAllSounds();
+    
+    // AudioContextを初期化・resume（ユーザー操作直後に実行）
+    await initializeAudioContext();
     
     const canvasRight = canvasRefRight.current;
     const canvasLeft = canvasRefLeft.current;
@@ -414,11 +425,9 @@ export default function DPOAE({
     let startTime = null;
     let lastFrequencyIndex = -1;
     
-    const animate = (timestamp) => {
+    const animate = async (timestamp) => {
       if (!startTime) {
         startTime = timestamp;
-        // AudioContextを初期化（ユーザー操作後に）
-        initializeAudioContext();
       }
       const elapsed = timestamp - startTime;
       const progress = Math.min(elapsed / durationMs, 1);
@@ -432,8 +441,10 @@ export default function DPOAE({
       // 新しい周波数が開始されたら音を再生
       if (currentFrequencyIndex > lastFrequencyIndex && audioContextRef.current) {
         const f2Freq = frequencies[currentFrequencyIndex];
-        const nodes = playDPOAETones(f2Freq, 0.3, 0.15);
-        audioNodesRef.current.push(...nodes);
+        const nodes = await playDPOAETones(f2Freq, 0.3, 0.15);
+        if (nodes && nodes.length > 0) {
+          audioNodesRef.current.push(...nodes);
+        }
         
         // 周波数が切り替わった瞬間に、前の周波数の測定完了として更新
         // 最初の周波数（index 0）が開始されたら、測定済みは1にする
@@ -612,7 +623,8 @@ export default function DPOAE({
           ? dpoaeData.noiseFloor[ear][index]
           : getNoiseFloor(freq);
         const snr = dpoaeLevel - noiseFloorLevel;  // SNR[band] = DPOAE_dB[band] - NoiseFloor_dB[band]
-        const isPass = snr >= 6;  // SNR ≥ 6 dB
+        // 浮動小数点の誤差を考慮して、5.99以上をPASSとする（表示上6.0以上ならPASS）
+        const isPass = snr >= 5.99;  // SNR ≥ 6 dB（浮動小数点誤差を考慮）
         
         return {
           frequency: freq,
@@ -634,7 +646,8 @@ export default function DPOAE({
             ? dpoaeData.noiseFloor[ear][index]
             : getNoiseFloor(freq);
           const snr = dpoaeLevel - noiseFloorLevel;
-          const isPass = snr >= 6;
+          // 浮動小数点の誤差を考慮して、5.99以上をPASSとする（表示上6.0以上ならPASS）
+          const isPass = snr >= 5.99;  // SNR ≥ 6 dB（浮動小数点誤差を考慮）
           return { isPass };
         });
         
@@ -677,7 +690,7 @@ export default function DPOAE({
               fontWeight: '500'
             }}
           >
-            {isPlaying ? '再生中...' : 'アニメーション再生'}
+            {isPlaying ? '実施中...' : 'DPOAE実施'}
           </button>
           <button
             onClick={exportGif}
