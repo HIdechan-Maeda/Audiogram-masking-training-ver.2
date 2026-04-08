@@ -4,7 +4,8 @@
   "description": "Audioscope EDU - オーディオグラム作成・マスキングトレーニングアプリケーション",
   "main": "index.js",
   "scripts": {
-    "start": "react-scripts start",
+    "dev": "dotenv -e .env -- react-scripts start",
+    "start": "dotenv -e .env -- react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
@@ -14,7 +15,7 @@
     "@supabase/supabase-js": "^2.76.1",
     "gif.js": "^0.2.0",
     "html2canvas": "^1.4.1",
-    "jspdf": "^3.0.3",
+    "jspdf": "^4.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "^5.0.1",
@@ -33,6 +34,7 @@
     ]
   },
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "pptxgenjs": "^4.0.1"
   },
   "overrides": {
