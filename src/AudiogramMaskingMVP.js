@@ -5516,28 +5516,34 @@ ${targets.map((target, index) => {
             </div>
           </div>
 
-          <div className="space-y-4 text-sm mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-            {/* Ear〜周波数のみ3列。Level・実効マスキングは下段 */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Control label="Ear">
-                <div className="flex gap-2">
-                  <button onClick={() => { setEar('R'); setFreq(1000); setSuppressLamp(true); }} className={`px-3 py-2 rounded-lg border text-base ${ear==='R' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-600'}`}>Right</button>
-                  <button onClick={() => { setEar('L'); setFreq(1000); setSuppressLamp(true); }} className={`px-3 py-2 rounded-lg border text-base ${ear==='L' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-600'}`}>Left</button>
-                </div>
-              </Control>
-              <Control label="Transducer">
-                <div className="flex gap-2">
-                  <TinyToggle active={trans==='AC'} onClick={() => { setTrans('AC'); setFreq(1000); setSuppressLamp(true); }}>AC</TinyToggle>
-                  <TinyToggle active={trans==='BC'} onClick={() => { setTrans('BC'); setFreq(1000); setSuppressLamp(true); }}>BC</TinyToggle>
-                </div>
-              </Control>
-              <Control label="Frequency">
-                <div className="flex items-center gap-2">
-                  <button onClick={() => moveFreq(-1)} className="px-2 py-1 rounded-lg border">◀</button>
-                  <div className="font-mono w-24 text-center">{freq} Hz</div>
-                  <button onClick={() => moveFreq(1)} className="px-2 py-1 rounded-lg border">▶</button>
-                </div>
-              </Control>
+          <div className="space-y-3 text-sm mb-4 p-3 sm:p-4 bg-slate-50 rounded-xl border border-slate-200">
+            {/* Ear〜周波数は内容幅で横並び（広い画面でも離れすぎない）。狭いときは折り返し */}
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start gap-y-3 gap-x-3 sm:gap-x-4 sm:gap-y-2">
+              <div className="shrink-0">
+                <Control label="Ear">
+                  <div className="flex gap-2">
+                    <button onClick={() => { setEar('R'); setFreq(1000); setSuppressLamp(true); }} className={`px-3 py-2 rounded-lg border text-base ${ear==='R' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-600'}`}>Right</button>
+                    <button onClick={() => { setEar('L'); setFreq(1000); setSuppressLamp(true); }} className={`px-3 py-2 rounded-lg border text-base ${ear==='L' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-600'}`}>Left</button>
+                  </div>
+                </Control>
+              </div>
+              <div className="shrink-0">
+                <Control label="Transducer">
+                  <div className="flex gap-2">
+                    <TinyToggle active={trans==='AC'} onClick={() => { setTrans('AC'); setFreq(1000); setSuppressLamp(true); }}>AC</TinyToggle>
+                    <TinyToggle active={trans==='BC'} onClick={() => { setTrans('BC'); setFreq(1000); setSuppressLamp(true); }}>BC</TinyToggle>
+                  </div>
+                </Control>
+              </div>
+              <div className="shrink-0">
+                <Control label="Frequency">
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => moveFreq(-1)} className="px-2 py-1 rounded-lg border shrink-0">◀</button>
+                    <div className="font-mono w-[5.5rem] sm:w-24 text-center shrink-0 tabular-nums">{freq} Hz</div>
+                    <button type="button" onClick={() => moveFreq(1)} className="px-2 py-1 rounded-lg border shrink-0">▶</button>
+                  </div>
+                </Control>
+              </div>
             </div>
             <div>
               <Control label="Level (dB HL)">
