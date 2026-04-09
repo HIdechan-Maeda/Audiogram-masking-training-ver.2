@@ -5725,7 +5725,7 @@ ${targets.map((target, index) => {
                     <div className="flex gap-2 flex-wrap">
                       <button
                         onClick={() => addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(level) }, { disableBlinkAfter: true })}
-                        className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors active:scale-95 transform text-sm"
+                        className="w-20 h-20 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors active:scale-95 transform text-sm font-semibold leading-tight flex items-center justify-center text-center"
                         title="現在の周波数・レベルで閾値をプロットします"
                       >
                         閾値決定
