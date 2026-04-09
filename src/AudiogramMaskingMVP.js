@@ -5718,7 +5718,6 @@ ${targets.map((target, index) => {
                     id="audiogram-threshold-panel"
                     className="bg-indigo-50 border-2 border-indigo-300 rounded-xl p-3 text-[15px] leading-snug max-w-[420px] shadow-sm ring-2 ring-indigo-100"
                   >
-                    <div className="text-xs font-medium text-indigo-700 mb-1.5">オーディオグラムの右側パネルで閾値をプロット</div>
                     <div className="flex items-start gap-2 mb-2">
                       <div className="text-indigo-600 text-[18px]">◎</div>
                       <div className="font-semibold text-indigo-900 text-[17px]">閾値決定</div>
