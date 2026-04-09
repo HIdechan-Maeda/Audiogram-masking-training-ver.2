@@ -1180,7 +1180,7 @@ export default function AudiogramMaskingMVP() {
     ]);
   }, []);
   
-  // AI生成症例の詳細情報を保存するstate
+  // 臨床症例生成の詳細情報を保存するstate
   const [customPresetDetails, setCustomPresetDetails] = useState(null);
   
   // 開発者モード
@@ -3321,7 +3321,7 @@ ${episodeHint ? `
     setShowAiAnswer(false);
     setCustomPresetDetails(null);
   };
-  // AI症例生成（臨床情報も含む完全な症例生成）
+  // 臨床症例生成（臨床情報も含む完全な症例生成）
   const generateAICase = async () => {
     // 新エンジンでオージオグラムを生成（sex/ageGroup/profile/severity/affectedSideは内部で乱択）
     try {
@@ -3418,7 +3418,7 @@ ${episodeHint ? `
       };
       setCurrentCaseInfo(caseInfo);
       setShowAiAnswer(false);
-      setShowAnswer(false); // AI症例生成時は正答表示を必ずOFF
+      setShowAnswer(false); // 臨床症例生成時は正答表示を必ずOFF
       setCustomPresetDetails(caseInfo);
       setShowCaseInfoModal(false);
       return; // 旧ロジックは使用しない
@@ -3803,7 +3803,7 @@ ${episodeHint ? `
     };
     setCurrentCaseInfo({ caseId: 'AI生成', ...caseDetails, tympanogram: normalizeTymp(caseDetails.tympanogram) });
     setShowAiAnswer(false);
-    setShowAnswer(false); // AI症例生成時は正答表示を必ずOFF
+    setShowAnswer(false); // 臨床症例生成時は正答表示を必ずOFF
     setShowCaseInfoModal(false);
     
     // 生成された症例を適用（プリセットと同じ形式で処理）
@@ -5028,7 +5028,7 @@ ${targets.map((target, index) => {
                 {/* 学習ポイント（OpenAI生成の場合のみ表示） */}
                 {currentCaseInfo.explanation && (
                   <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-                    <h4 className="text-sm font-semibold text-yellow-800 mb-2">💡 学習ポイント（AI生成）</h4>
+                    <h4 className="text-sm font-semibold text-yellow-800 mb-2">💡 学習ポイント（臨床症例生成）</h4>
                     <p className="text-sm text-gray-700">{currentCaseInfo.explanation}</p>
                   </div>
                 )}
@@ -5148,14 +5148,14 @@ ${targets.map((target, index) => {
           </div>
         )}
 
-        {/* DPOAE Modal - AI生成症例用 */}
+        {/* DPOAE Modal - 臨床症例生成用 */}
         {showDPOAE && currentCaseInfo?.dpoaeConfig && currentCaseInfo?.caseId === 'AI生成' && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-2xl shadow-lg p-6 max-w-[95vw] w-full mx-4 max-h-[95vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-2xl font-bold text-orange-800">DPOAE実施</h3>
-                  <p className="text-sm text-gray-600 mt-1">AI生成症例</p>
+                  <p className="text-sm text-gray-600 mt-1">臨床症例生成</p>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -5206,7 +5206,7 @@ ${targets.map((target, index) => {
             <select className="border rounded-xl px-2 py-1 text-sm" value={selectedPreset} onChange={(e)=> {
               const newPreset = e.target.value;
               setSelectedPreset(newPreset);
-              // プリセット症例を選択した場合はAI生成症例の詳細をクリア
+              // プリセット症例を選択した場合は臨床症例生成の詳細をクリア
               setCustomPresetDetails(null);
               // もしプリセット症例が選択された場合は、その症例情報を設定
               const caseDetails = PRESET_DETAILS[newPreset];
@@ -5248,7 +5248,7 @@ ${targets.map((target, index) => {
                 setPresetToast(`症例${selectedPreset}をロードしました`);
                 setTimeout(()=> setPresetToast(''), 1200);
                 
-                // AI生成症例の詳細情報をクリア（プリセット症例を選択したので）
+                // 臨床症例生成の詳細情報をクリア（プリセット症例を選択したので）
                 setCustomPresetDetails(null);
                 
                 // 症例情報を設定（プリセット症例の情報を使用）
@@ -5351,10 +5351,10 @@ ${targets.map((target, index) => {
           </div>
         </div>
 
-        {/* AI症例生成 */}
+        {/* 臨床症例生成 */}
         <div className="bg-white rounded-2xl shadow p-4">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm text-gray-600">AI症例生成</span>
+            <span className="text-sm text-gray-600">臨床症例生成</span>
             <button 
               className={`px-3 py-2 rounded-xl text-white text-sm flex items-center gap-2 transition-colors ${
                 isLoadingRandom ? 'bg-green-400 opacity-70 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
@@ -5362,10 +5362,10 @@ ${targets.map((target, index) => {
               onClick={async ()=>{
                 if (isLoadingRandom) return;
                 setIsLoadingRandom(true);
-                setRandomToast('🤖 AIが症例を生成中…');
+                setRandomToast('🤖 臨床症例を生成中…');
                 try {
                   await generateAICase();
-                  setRandomToast('✅ AI症例を生成しました');
+                  setRandomToast('✅ 臨床症例を生成しました');
                 } catch (error) {
                   console.error('症例生成エラー:', error);
                   setRandomToast('❌ 症例生成に失敗しました');
@@ -5382,20 +5382,20 @@ ${targets.map((target, index) => {
                   ロード中...
                 </>
               ) : (
-                'AI症例生成'
+                '臨床症例生成'
               )}
             </button>
-            {/* AI症例用 症例情報＋Tym（常時表示。生成前は無効） */}
+            {/* 臨床症例用 症例情報＋Tym（常時表示。生成前は無効） */}
             <button
               onClick={() => {
                 if (currentCaseInfo?.caseId === 'AI生成') {
                   setShowCaseInfoModal(true);
                 } else {
-                  alert('AI症例生成後に症例情報を表示できます');
+                  alert('臨床症例生成後に症例情報を表示できます');
                 }
               }}
               className={`px-3 py-2 rounded-xl text-white text-sm flex items-center gap-2 ${currentCaseInfo?.caseId === 'AI生成' ? 'bg-gray-700 hover:bg-gray-800' : 'bg-gray-300 cursor-not-allowed'}`}
-              title="症例情報（AI症例）を表示"
+              title="症例情報（臨床症例）を表示"
             >
               📝 症例情報
             </button>
@@ -5404,11 +5404,11 @@ ${targets.map((target, index) => {
                 if (currentCaseInfo?.caseId === 'AI生成' && currentCaseInfo?.tympanogram) {
                   setShowTympanogram(true);
                 } else {
-                  alert('AI症例生成後にTymを表示できます');
+                  alert('臨床症例生成後にTymを表示できます');
                 }
               }}
               className={`px-3 py-2 rounded-xl text-white text-sm flex items-center gap-2 ${currentCaseInfo?.caseId === 'AI生成' && currentCaseInfo?.tympanogram ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'}`}
-              title="ティンパノグラム検査を表示（AI症例）"
+              title="ティンパノグラム検査を表示（臨床症例）"
             >
               📊 Tym
             </button>
@@ -5416,7 +5416,7 @@ ${targets.map((target, index) => {
               <button
                 onClick={() => setShowStapedialReflex(true)}
                 className="px-3 py-2 rounded-xl text-white text-sm bg-purple-600 hover:bg-purple-700 flex items-center gap-2"
-                title="あぶみ骨筋反射（ART）検査を表示（AI生成症例）"
+                title="あぶみ骨筋反射（ART）検査を表示（臨床症例生成）"
               >
                 ART検査を見る
               </button>
@@ -5438,15 +5438,15 @@ ${targets.map((target, index) => {
                     ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                     : 'bg-white text-emerald-700 border-emerald-600 hover:bg-emerald-50'
                 }`}
-                title="AI症例の答え合わせを表示"
+                title="臨床症例の答え合わせを表示"
               >
                 {showAiAnswer ? '答え合わせを隠す' : '答え合わせを見る'}
               </button>
             )}
-            <span className="text-xs text-gray-400">🤖 AIにより症例パターンを自動生成（正常・感音性・伝音性・混合性難聴）+ 臨床情報も自動生成</span>
+            <span className="text-xs text-gray-400">※ 臨床症例生成：難聴パターン（正常・感音性・伝音性・混合性）と臨床情報を自動生成</span>
           </div>
 
-        {/* 答え合わせ（AI症例用） */}
+        {/* 答え合わせ（臨床症例用） */}
         {currentCaseInfo?.caseId === 'AI生成' && showAiAnswer && (
           <div className="mt-3 p-3 border rounded-xl bg-gray-50">
             <div className="text-sm font-semibold mb-1">答え合わせ（耳ごとの最終診断タイプ）</div>

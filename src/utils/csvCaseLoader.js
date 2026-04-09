@@ -131,7 +131,7 @@ export async function loadCaseDatabase(disorderName) {
     const cases = parseCSV(csvText);
     
     // 既存のJSON形式に合わせて変換（聴力データとティンパノグラム型は自動生成されるため含めない）
-    // AI症例生成で使用するのは基本情報、主訴、病歴、鼓膜所見
+    // 臨床症例生成で使用するのは基本情報、主訴、病歴、鼓膜所見
     return cases.map(c => ({
       caseId: c.caseId,
       chiefComplaint: c.chiefComplaint,
@@ -140,7 +140,7 @@ export async function loadCaseDatabase(disorderName) {
       age_min: c.age_min || null,
       age_max: c.age_max || null,
       gender: c.gender || null
-      // notes はAI症例生成では使用しない
+      // notes は臨床症例生成では使用しない
       // ac, bc_all, bc, tympanogram は自動生成されるため含めない
     }));
   } catch (error) {
