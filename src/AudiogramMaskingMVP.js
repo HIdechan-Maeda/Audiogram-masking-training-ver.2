@@ -5705,7 +5705,6 @@ ${targets.map((target, index) => {
             <div className="shrink-0 pl-2" style={{ display: 'flex', alignItems: 'flex-start' }}>
                 <div className="flex flex-col gap-3">
                   {showLegend && (
-                    <>
                   <ul className="space-y-0.5 text-[18px] leading-tight pr-1">
                     {SERIES.map(s => (
                       <li key={s.key} className="flex items-center gap-2">
@@ -5714,6 +5713,44 @@ ${targets.map((target, index) => {
                       </li>
                     ))}
                   </ul>
+                  )}
+                  <div
+                    id="audiogram-threshold-panel"
+                    className="bg-indigo-50 border-2 border-indigo-300 rounded-xl p-3 text-[15px] leading-snug max-w-[420px] shadow-sm ring-2 ring-indigo-100"
+                  >
+                    <div className="text-xs font-medium text-indigo-700 mb-1.5">オーディオグラムの右側パネルで閾値をプロット</div>
+                    <div className="flex items-start gap-2 mb-2">
+                      <div className="text-indigo-600 text-[18px]">◎</div>
+                      <div className="font-semibold text-indigo-900 text-[17px]">閾値決定</div>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(level) }, { disableBlinkAfter: true })}
+                        className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors active:scale-95 transform text-sm"
+                        title="現在の周波数・レベルで閾値をプロットします"
+                      >
+                        閾値決定
+                      </button>
+                      <button
+                        onClick={removePointAtCurrent}
+                        className="px-3 py-2 rounded-xl bg-white border border-indigo-200 hover:bg-indigo-50 transition-colors active:scale-95 transform text-sm"
+                      >
+                        削除
+                      </button>
+                      <button
+                        onClick={clearAll}
+                        className="px-3 py-2 rounded-xl bg-white border border-indigo-200 hover:bg-indigo-50 transition-colors active:scale-95 transform text-sm"
+                      >
+                        全クリア
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-2">
+                      ※ チャートをクリックすると<strong>レベル（dB）位置のみ</strong>が変わります。閾値の<strong>プロットは「閾値決定」</strong>を押してください。<br />
+                      ※ キーボード: ←→周波数変更 | ↑↓レベル±5dB（打点なし） | Deleteで現在周波数の打点削除
+                    </p>
+                  </div>
+                  {showLegend && (
+                    <>
                   <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-[15px] leading-snug max-w-[420px]">
                     <div className="flex items-start gap-2 mb-1">
                       <div className="text-green-600 text-[18px]">⌨️</div>
@@ -5760,41 +5797,6 @@ ${targets.map((target, index) => {
                   </div>
                     </>
                   )}
-                  <div
-                    id="audiogram-threshold-panel"
-                    className="bg-indigo-50 border-2 border-indigo-300 rounded-xl p-3 text-[15px] leading-snug max-w-[420px] shadow-sm ring-2 ring-indigo-100 mt-2 pt-4 border-t-indigo-400"
-                  >
-                    <div className="text-xs font-medium text-indigo-700 mb-1.5">オーディオグラムの右側（ダウンロードの下で打点）</div>
-                    <div className="flex items-start gap-2 mb-2">
-                      <div className="text-indigo-600 text-[18px]">◎</div>
-                      <div className="font-semibold text-indigo-900 text-[17px]">閾値決定</div>
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        onClick={() => addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(level) }, { disableBlinkAfter: true })}
-                        className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors active:scale-95 transform text-sm"
-                        title="現在の周波数・レベルで閾値をプロットします"
-                      >
-                        閾値決定
-                      </button>
-                      <button
-                        onClick={removePointAtCurrent}
-                        className="px-3 py-2 rounded-xl bg-white border border-indigo-200 hover:bg-indigo-50 transition-colors active:scale-95 transform text-sm"
-                      >
-                        削除
-                      </button>
-                      <button
-                        onClick={clearAll}
-                        className="px-3 py-2 rounded-xl bg-white border border-indigo-200 hover:bg-indigo-50 transition-colors active:scale-95 transform text-sm"
-                      >
-                        全クリア
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-600 mt-2">
-                      ※ チャートをクリックすると<strong>レベル（dB）位置のみ</strong>が変わります。閾値の<strong>プロットは「閾値決定」</strong>を押してください。<br />
-                      ※ キーボード: ←→周波数変更 | ↑↓レベル±5dB（打点なし） | Deleteで現在周波数の打点削除
-                    </p>
-                  </div>
                 </div>
             </div>
           </div>
