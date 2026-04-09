@@ -5602,17 +5602,20 @@ ${targets.map((target, index) => {
 
           <div className="flex items-stretch gap-0 items-start">
             <div ref={chartHostRef} className="relative chart-host" style={{ width: chartW, height: chartH, overflow: 'visible' }}>
-              {/* 応答ランプ（表示のみ・文字なし）：グラフ左上 */}
+              {/* 応答ランプ（表示のみ）：グラフ左上 */}
               <div
-                className="absolute z-[15] pointer-events-none rounded-full border p-1 bg-white/95 backdrop-blur-sm shadow-sm"
+                className="absolute z-[15] pointer-events-none flex flex-col items-center gap-0.5"
                 style={{ left: 6, top: 6 }}
                 aria-live="polite"
                 aria-label={lampOn ? '応答あり' : '応答なし'}
               >
-                <div
-                  className={`w-5 h-5 rounded-full ${lampOn ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.7)]' : 'bg-slate-300'}`}
-                  title={lampOn ? '応答あり' : '応答なし'}
-                />
+                <div className="rounded-full border p-1 bg-white/95 backdrop-blur-sm shadow-sm">
+                  <div
+                    className={`w-5 h-5 rounded-full ${lampOn ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.7)]' : 'bg-slate-300'}`}
+                    title={lampOn ? '応答あり' : '応答なし'}
+                  />
+                </div>
+                <span className="text-[10px] leading-tight font-medium text-slate-600 whitespace-nowrap">応答ランプ</span>
               </div>
               <div
                 ref={overlayRef}
