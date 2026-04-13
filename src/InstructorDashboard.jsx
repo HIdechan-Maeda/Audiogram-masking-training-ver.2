@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase, isSupabaseDisabled } from './supabaseClient';
+import { fetchAllUsageEvents, usageEventTypeLabel, formatUsageMetadataPreview } from './usageEvents';
 
 export default function InstructorDashboard({ instructor, onLogout }) {
   const [students, setStudents] = useState([]);
@@ -15,6 +16,8 @@ export default function InstructorDashboard({ instructor, onLogout }) {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
+  const [usageEvents, setUsageEvents] = useState([]);
+  const [usageSearch, setUsageSearch] = useState('');
 
   // データを読み込む
   const loadData = async () => {
@@ -104,6 +107,13 @@ export default function InstructorDashboard({ instructor, onLogout }) {
         totalCompletedCases,
         todayActivity,
       });
+
+      const { data: usageData, error: usageErr } = await fetchAllUsageEvents(2000);
+      if (!usageErr && usageData) {
+        setUsageEvents(usageData);
+      } else if (usageErr) {
+        console.warn('使用履歴の取得:', usageErr);
+      }
     } catch (error) {
       console.error('データ読み込みエラー:', error);
     } finally {
@@ -161,6 +171,11 @@ export default function InstructorDashboard({ instructor, onLogout }) {
   // フィルタリング
   const filteredStudents = students.filter(student =>
     student.student_id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredUsageEvents = usageEvents.filter((ev) =>
+    !usageSearch.trim() ||
+    String(ev.student_id || '').toLowerCase().includes(usageSearch.trim().toLowerCase())
   );
 
   // ページネーション
@@ -276,6 +291,50 @@ export default function InstructorDashboard({ instructor, onLogout }) {
               <span>CSV出力</span>
             </button>
           </div>
+        </div>
+
+        {/* 使用履歴（全学生） */}
+        <div className="bg-white rounded-2xl shadow p-4 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+            <h2 className="text-lg font-semibold text-gray-900">使用履歴ログ</h2>
+            <input
+              type="text"
+              placeholder="学生IDで絞り込み..."
+              value={usageSearch}
+              onChange={(e) => setUsageSearch(e.target.value)}
+              className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            />
+          </div>
+          {isSupabaseDisabled ? (
+            <p className="text-sm text-gray-500">Supabase が無効のため、使用履歴は取得できません。</p>
+          ) : filteredUsageEvents.length === 0 ? (
+            <p className="text-sm text-gray-500">使用履歴がありません。student_usage_events テーブルを作成し、学生アプリで Supabase を有効にしてください。</p>
+          ) : (
+            <div className="overflow-x-auto max-h-96 overflow-y-auto text-sm">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="text-left text-gray-600 border-b">
+                    <th className="py-2 pr-2">日時</th>
+                    <th className="py-2 pr-2">学生ID</th>
+                    <th className="py-2 pr-2">種別</th>
+                    <th className="py-2">概要</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsageEvents.map((row) => (
+                    <tr key={row.id} className="border-b border-gray-100">
+                      <td className="py-2 pr-2 whitespace-nowrap">
+                        {row.created_at ? new Date(row.created_at).toLocaleString('ja-JP') : '—'}
+                      </td>
+                      <td className="py-2 pr-2 font-medium">{row.student_id}</td>
+                      <td className="py-2 pr-2">{usageEventTypeLabel(row.event_type)}</td>
+                      <td className="py-2 text-gray-700 break-all">{formatUsageMetadataPreview(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* 学生一覧テーブル */}
@@ -519,6 +578,45 @@ export default function InstructorDashboard({ instructor, onLogout }) {
                 {!selectedStudent.progress && (
                   <div className="bg-yellow-50 rounded-lg p-4 text-center text-gray-600">
                     進捗データがありません
+                  </div>
+                )}
+
+                {/* この学生の使用履歴 */}
+                {!isSupabaseDisabled && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3">使用履歴（この学生）</h3>
+                    {(() => {
+                      const evs = usageEvents
+                        .filter((e) => e.student_id === selectedStudent.student_id)
+                        .slice(0, 40);
+                      if (evs.length === 0) {
+                        return <p className="text-sm text-gray-600">記録がありません</p>;
+                      }
+                      return (
+                        <div className="overflow-x-auto max-h-56 overflow-y-auto text-xs">
+                          <table className="w-full border-collapse">
+                            <thead>
+                              <tr className="text-left text-gray-600 border-b">
+                                <th className="py-1 pr-2">日時</th>
+                                <th className="py-1 pr-2">種別</th>
+                                <th className="py-1">概要</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {evs.map((row) => (
+                                <tr key={row.id} className="border-b border-gray-200">
+                                  <td className="py-1 pr-2 whitespace-nowrap">
+                                    {row.created_at ? new Date(row.created_at).toLocaleString('ja-JP') : '—'}
+                                  </td>
+                                  <td className="py-1 pr-2">{usageEventTypeLabel(row.event_type)}</td>
+                                  <td className="py-1 break-all">{formatUsageMetadataPreview(row)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

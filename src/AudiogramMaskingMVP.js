@@ -1,5 +1,13 @@
-import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
-import { supabase } from './supabaseClient';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } from "react";
+import { supabase, isSupabaseDisabled } from './supabaseClient';
+import {
+  logStudentUsageEvent,
+  buildDefaultPresetProgressSnapshot,
+  USAGE_EVENT,
+  fetchStudentUsageEvents,
+  usageEventTypeLabel,
+  formatUsageMetadataPreview,
+} from './usageEvents';
 import { ResponsiveContainer, ComposedChart, XAxis, YAxis, CartesianGrid, Scatter, Line, ReferenceArea, ReferenceLine } from "recharts";
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -1277,7 +1285,23 @@ export default function AudiogramMaskingMVP() {
 
   // Supabase Anonymous Auth（学生IDログイン後）
   const [userId, setUserId] = useState(null);
-  
+  const [usageHistory, setUsageHistory] = useState([]);
+  const [usageHistoryLoading, setUsageHistoryLoading] = useState(false);
+  const isInitialLoad = useRef(true);
+  const lastDefaultProgressLogRef = useRef('');
+
+  const reloadUsageHistory = useCallback(async (studentIdOverride) => {
+    const sid = studentIdOverride || currentStudentId;
+    if (!sid || isSupabaseDisabled) return;
+    setUsageHistoryLoading(true);
+    try {
+      const { data, error } = await fetchStudentUsageEvents(sid, 150);
+      if (!error && data) setUsageHistory(data);
+    } finally {
+      setUsageHistoryLoading(false);
+    }
+  }, [currentStudentId]);
+
   // 学生IDでログインする関数
   const handleStudentLogin = async () => {
     if (!studentId.trim()) {
@@ -1380,6 +1404,9 @@ export default function AudiogramMaskingMVP() {
         console.warn('進捗データの読み込みエラー（テーブル未作成の可能性）:', progressError);
         // 進捗データの読み込みに失敗してもログインは続行
       }
+
+      await logStudentUsageEvent(normalizedStudentId, userId, USAGE_EVENT.LOGIN, {});
+      await reloadUsageHistory(normalizedStudentId);
     } catch (error) {
       console.error('ログインエラー:', error);
       alert(`ログインに失敗しました: ${error.message || '不明なエラー'}\n\nブラウザのコンソールで詳細を確認してください。`);
@@ -1493,10 +1520,16 @@ export default function AudiogramMaskingMVP() {
       console.warn('データベース保存エラー（テーブル未作成の可能性）:', error);
       // エラーが発生してもローカルストレージには保存済みなので続行
     }
+
+    const snap = buildDefaultPresetProgressSnapshot(progressData);
+    const snapStr = JSON.stringify(snap);
+    if (snapStr !== lastDefaultProgressLogRef.current) {
+      lastDefaultProgressLogRef.current = snapStr;
+      void logStudentUsageEvent(currentStudentId, userId, USAGE_EVENT.DEFAULT_CASE_PROGRESS, { snapshot: snap });
+    }
   };
-  
+
   // 進捗が変更されたらSupabaseに保存（初回ロード時は除外）
-  const isInitialLoad = useRef(true);
   useEffect(() => {
     if (isInitialLoad.current) {
       isInitialLoad.current = false;
@@ -1506,6 +1539,12 @@ export default function AudiogramMaskingMVP() {
       saveStudentProgress(learningProgress);
     }
   }, [learningProgress, isAuthenticated, currentStudentId]);
+
+  useEffect(() => {
+    if (isAuthenticated && currentStudentId && !isSupabaseDisabled) {
+      reloadUsageHistory();
+    }
+  }, [isAuthenticated, currentStudentId, reloadUsageHistory]);
 
   // オーディオグラムを画像としてダウンロードする関数
   const downloadAudiogramAsImage = async (format = 'jpeg') => {
@@ -3421,6 +3460,16 @@ ${episodeHint ? `
       setShowAnswer(false); // 臨床症例生成時は正答表示を必ずOFF
       setCustomPresetDetails(caseInfo);
       setShowCaseInfoModal(false);
+      if (currentStudentId) {
+        void logStudentUsageEvent(currentStudentId, userId, USAGE_EVENT.CLINICAL_CASE_GENERATION, {
+          disorderLabel: profileName,
+          ageGroup: finalAgeGroup,
+        });
+        void (async () => {
+          const { data: uh, error: uhErr } = await fetchStudentUsageEvents(currentStudentId, 150);
+          if (!uhErr && uh) setUsageHistory(uh);
+        })();
+      }
       return; // 旧ロジックは使用しない
     } catch (e) {
       console.error('AIエンジン生成エラー', e);
@@ -4777,6 +4826,8 @@ ${targets.map((target, index) => {
                   setIsAuthenticated(false);
                   setCurrentStudentId(null);
                   setStudentId('');
+                  setUsageHistory([]);
+                  lastDefaultProgressLogRef.current = '';
                   // sessionStorageからも削除
                   try {
                     sessionStorage.removeItem('audioscope_edu_student_id');
@@ -4871,6 +4922,49 @@ ${targets.map((target, index) => {
               })}
             </div>
           </div>
+        </div>
+
+        {/* 使用履歴（自分の student_id のみ取得・表示） */}
+        <div className="bg-white rounded-2xl shadow p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">使用履歴</h2>
+            <button
+              type="button"
+              onClick={() => reloadUsageHistory()}
+              disabled={usageHistoryLoading || isSupabaseDisabled}
+              className="px-3 py-1 rounded-lg border text-sm bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+            >
+              {usageHistoryLoading ? '読込中…' : '更新'}
+            </button>
+          </div>
+          {isSupabaseDisabled ? (
+            <p className="text-sm text-gray-500">Supabase が無効のため、使用履歴は保存・表示されません。</p>
+          ) : usageHistory.length === 0 ? (
+            <p className="text-sm text-gray-500">まだ記録がありません。ログイン・学習・臨床症例生成で記録されます。</p>
+          ) : (
+            <div className="overflow-x-auto max-h-72 overflow-y-auto text-sm">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="text-left text-gray-600 border-b">
+                    <th className="py-2 pr-2">日時</th>
+                    <th className="py-2 pr-2">種別</th>
+                    <th className="py-2">概要</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usageHistory.map((row) => (
+                    <tr key={row.id} className="border-b border-gray-100">
+                      <td className="py-2 pr-2 whitespace-nowrap">
+                        {row.created_at ? new Date(row.created_at).toLocaleString('ja-JP') : '—'}
+                      </td>
+                      <td className="py-2 pr-2">{usageEventTypeLabel(row.event_type)}</td>
+                      <td className="py-2 text-gray-700 break-all">{formatUsageMetadataPreview(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* 講習会用説明 */}
