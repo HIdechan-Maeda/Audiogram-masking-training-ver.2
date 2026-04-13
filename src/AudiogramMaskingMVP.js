@@ -4789,6 +4789,15 @@ ${targets.map((target, index) => {
           <div className="mt-6 text-center text-sm text-gray-500">
             学生IDでログインすると、進捗状況が自動的に保存されます
           </div>
+          <div className="mt-6 pt-4 border-t border-gray-200 text-center">
+            <p className="text-xs text-gray-500 mb-2">講師・スタッフの方</p>
+            <a
+              href="?mode=instructor"
+              className="inline-block text-sm font-medium text-blue-600 hover:text-blue-800 underline"
+            >
+              講師用ダッシュボードへ（講師ID・パスワードが必要です）
+            </a>
+          </div>
         </div>
       </div>
     );

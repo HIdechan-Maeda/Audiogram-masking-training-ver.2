@@ -196,6 +196,14 @@ export default function InstructorLogin({ onLogin }) {
           <div>講師ID: instructor01 / パスワード: password01</div>
           <div>講師ID: instructor02 / パスワード: password02</div>
         </div>
+        <div className="mt-4 text-center">
+          <a
+            href="/"
+            className="text-sm text-gray-600 hover:text-gray-900 underline"
+          >
+            学生用のログイン画面へ戻る
+          </a>
+        </div>
       </div>
     </div>
   );
