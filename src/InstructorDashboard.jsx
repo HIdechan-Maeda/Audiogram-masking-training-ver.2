@@ -308,7 +308,7 @@ export default function InstructorDashboard({ instructor, onLogout }) {
           {isSupabaseDisabled ? (
             <p className="text-sm text-gray-500">Supabase が無効のため、使用履歴は取得できません。</p>
           ) : filteredUsageEvents.length === 0 ? (
-            <p className="text-sm text-gray-500">使用履歴がありません。student_usage_events テーブルを作成し、学生アプリで Supabase を有効にしてください。</p>
+            <p className="text-sm text-gray-500">まだ使用履歴はありません。学生がログイン・学習を開始すると、ここに履歴が表示されます。</p>
           ) : (
             <div className="overflow-x-auto max-h-96 overflow-y-auto text-sm">
               <table className="w-full border-collapse">
