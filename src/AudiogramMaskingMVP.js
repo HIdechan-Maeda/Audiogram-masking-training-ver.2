@@ -4177,20 +4177,21 @@ ${episodeHint ? `
   }, [targets]);
 
   // オーバーマスキング検出
-  const isOverMasking = useMemo(() => {
-    if (!masked || !overMaskingWarning) return false;
-    
+  const overMaskingDetails = useMemo(() => {
+    if (!masked || !overMaskingWarning) return null;
+
     const testEarBC = getThr(ear, 'BC', freq);
     if (testEarBC === Infinity) {
-      return false;
+      return null;
     }
-    
+
     // マスキングの上限 = 測定耳BC閾値 + 50dB
     const maskingLimit = testEarBC + 50;
-    
-    // マスキングレベルが上限を超えている場合
-    return maskLevel > maskingLimit;
+    const overBy = Math.max(0, maskLevel - maskingLimit);
+
+    return { testEarBC, maskingLimit, overBy };
   }, [masked, maskLevel, ear, freq, overMaskingWarning, targetMap]);
+  const isOverMasking = !!overMaskingDetails && overMaskingDetails.overBy > 0;
 
   // クロスヒアリング検出
   const crossHearingInfo = useMemo(() => {
@@ -5581,14 +5582,6 @@ ${targets.map((target, index) => {
                   </div>
                 </div>
               </div>
-              {isOverMasking && (
-                <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-3">
-                  <div className="flex items-center gap-2">
-                    <div className="text-red-600 text-lg">⚠️</div>
-                    <div className="font-semibold text-red-800">オーバーマスキングの可能性あり！！</div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -5703,6 +5696,20 @@ ${targets.map((target, index) => {
                   </div>
                 </div>
               </div>
+              {isOverMasking && overMaskingDetails && (
+                <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="text-red-600 text-lg">⚠️</div>
+                    <div className="font-semibold text-red-800">オーバーマスキングの可能性あり！！</div>
+                  </div>
+                  <div className="text-sm text-red-700 space-y-1">
+                    <div>• 測定耳BC閾値: {overMaskingDetails.testEarBC}dB</div>
+                    <div>• マスキング上限目安: {overMaskingDetails.maskingLimit}dB（BC + 50dB）</div>
+                    <div>• 現在値: {maskLevel}dB（+{overMaskingDetails.overBy}dB 超過）</div>
+                    <div className="text-xs text-red-600 mt-1">💡 マスキングレベルを下げて再確認してください</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
