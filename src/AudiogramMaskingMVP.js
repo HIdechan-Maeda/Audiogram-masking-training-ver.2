@@ -4206,13 +4206,13 @@ ${episodeHint ? `
     const ia = icSettings[freq]?.[trans] ?? (trans === 'AC' ? 50 : 0);
     const leakedToNTE = level - ia;
     const nteBC = getThr(nte, 'BC', freq);
-    
+
     // マスキングが適用されている場合の効果的なマスキングレベル
     let effectiveMask = nteBC;
     if (masked && maskLevel > nteBC) {
       effectiveMask = maskLevel;
     }
-    
+
     // クロスヒアリングが発生する条件
     const isCrossHearing = leakedToNTE >= effectiveMask;
     
