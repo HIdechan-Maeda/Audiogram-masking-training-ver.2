@@ -5565,26 +5565,6 @@ ${targets.map((target, index) => {
         )}
         </div>
 
-        {/* クロスヒアリング警告 */}
-        {crossHearingInfo.isCrossHearing && (
-          <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
-            <div className="flex items-start gap-3">
-              <div className="text-orange-600 text-xl">🔊</div>
-              <div className="flex-1">
-                <div className="font-semibold text-orange-800 mb-2">クロスヒアリングの可能性あり！</div>
-                <div className="text-sm text-orange-700 space-y-1">
-                  <div>• 現在のレベル（{level}dB）が非測定耳の骨導（{crossHearingInfo.details.nte} BC）に流れクロスヒアリングしています</div>
-                  <div>• 漏れレベル: {crossHearingInfo.details.leakedToNTE.toFixed(1)}dB（IA: {crossHearingInfo.details.ia}dB減衰後）</div>
-                  <div>• 非測定耳BC閾値: {crossHearingInfo.details.nteBC === Infinity ? '未測定' : crossHearingInfo.details.nteBC + 'dB'}</div>
-                  <div>• 実効マスキングレベル: {crossHearingInfo.details.effectiveMask === Infinity ? 'なし' : crossHearingInfo.details.effectiveMask + 'dB'}</div>
-                  <div className="mt-2 text-xs text-orange-600">
-                    💡 マスキングレベルを上げるか、測定レベルを下げることを検討してください
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
         {/* Audiogram（測定条件〜チャート〜右欄は同一カード） */}
         <div className="bg-white rounded-2xl shadow p-5">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -5707,6 +5687,23 @@ ${targets.map((target, index) => {
                     <div>• マスキング上限目安: {overMaskingDetails.maskingLimit}dB（BC + 50dB）</div>
                     <div>• 現在値: {maskLevel}dB（+{overMaskingDetails.overBy}dB 超過）</div>
                     <div className="text-xs text-red-600 mt-1">💡 マスキングレベルを下げて再確認してください</div>
+                  </div>
+                </div>
+              )}
+              {crossHearingInfo.isCrossHearing && (
+                <div className="mt-3 bg-orange-50 border border-orange-200 rounded-xl p-3">
+                  <div className="flex items-start gap-2">
+                    <div className="text-orange-600 text-lg">🔊</div>
+                    <div className="flex-1">
+                      <div className="font-semibold text-orange-800 mb-1">クロスヒアリングの可能性あり！</div>
+                      <div className="text-sm text-orange-700 space-y-1">
+                        <div>• 現在のレベル（{level}dB）が非測定耳の骨導（{crossHearingInfo.details.nte} BC）に流れクロスヒアリングしています</div>
+                        <div>• 漏れレベル: {crossHearingInfo.details.leakedToNTE.toFixed(1)}dB（IA: {crossHearingInfo.details.ia}dB減衰後）</div>
+                        <div>• 非測定耳BC閾値: {crossHearingInfo.details.nteBC === Infinity ? '未測定' : crossHearingInfo.details.nteBC + 'dB'}</div>
+                        <div>• 実効マスキングレベル: {crossHearingInfo.details.effectiveMask === Infinity ? 'なし' : crossHearingInfo.details.effectiveMask + 'dB'}</div>
+                        <div className="text-xs text-orange-600 mt-1">💡 マスキングレベルを上げるか、測定レベルを下げることを検討してください</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
