@@ -5564,17 +5564,6 @@ ${targets.map((target, index) => {
         )}
         </div>
 
-        {/* オーバーマスキング警告 */}
-        {isOverMasking && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
-            <div className="flex items-center gap-3">
-              <div className="text-red-600 text-xl">⚠️</div>
-              <div>
-                <div className="font-semibold text-red-800">オーバーマスキングの可能性あり！！</div>
-              </div>
-            </div>
-          </div>
-        )}
         {/* クロスヒアリング警告 */}
         {crossHearingInfo.isCrossHearing && (
           <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
@@ -5592,6 +5581,14 @@ ${targets.map((target, index) => {
                   </div>
                 </div>
               </div>
+              {isOverMasking && (
+                <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-3">
+                  <div className="flex items-center gap-2">
+                    <div className="text-red-600 text-lg">⚠️</div>
+                    <div className="font-semibold text-red-800">オーバーマスキングの可能性あり！！</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
