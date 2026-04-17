@@ -5311,6 +5311,17 @@ ${targets.map((target, index) => {
               setSelectedPreset(newPreset);
               // プリセット症例を選択した場合は臨床症例生成の詳細をクリア
               setCustomPresetDetails(null);
+              // 選択と同時に正答用ターゲット（PTA）を反映（LOADを押さないと更新されない問題の修正）
+              const p = PRESET_MAP[newPreset];
+              if (p) {
+                setPoints([]);
+                setTargets(buildTargetsFromPreset(p));
+                setEar('R');
+                setTrans('AC');
+                setLevel(0);
+                setMaskLevel(-15);
+                setFreq(1000);
+              }
               // もしプリセット症例が選択された場合は、その症例情報を設定
               const caseDetails = PRESET_DETAILS[newPreset];
               if (caseDetails) {
