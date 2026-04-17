@@ -238,12 +238,11 @@ const PRESET_G = preset('症例G', [
 ]);
 
 const PRESET_H = preset('症例H', [
-  // Right AC / BC - 軽度高音障害
-  mk('R','AC', [[125,10],[250,10],[500,10],[1000,25],[2000,30],[4000,30],[8000,50]]),
-  mk('R','BC', [[250,5],[500,5],[1000,30],[2000,30],[4000,25]]),
-  // Left AC / BC - 伝音優位の混合性難聴（air-bone gapあり）
-  mk('L','AC', [[125,35],[250,40],[500,40],[1000,50],[2000,45],[4000,40],[8000,50]]),
-  mk('L','BC', [[250,10],[500,15],[1000,20],[2000,25],[4000,20]])
+  // PTAのみ左右入替（症例情報・Tymは急性中耳炎のまま）
+  mk('R','AC', [[125,35],[250,40],[500,40],[1000,50],[2000,45],[4000,40],[8000,50]]),
+  mk('R','BC', [[250,10],[500,15],[1000,20],[2000,25],[4000,20]]),
+  mk('L','AC', [[125,10],[250,10],[500,10],[1000,25],[2000,30],[4000,30],[8000,50]]),
+  mk('L','BC', [[250,5],[500,5],[1000,30],[2000,30],[4000,25]])
 ]);
 // 症例の詳細情報
 const PRESET_DETAILS = {
@@ -348,15 +347,15 @@ const PRESET_DETAILS = {
   H: {
     age: '68歳',
     gender: '男性',
-    chiefComplaint: '左耳の聞こえにくさと耳閉感',
-    history: '数か月前から左耳の聞こえにくさを自覚。会話時に聞き返しが増えたため受診した',
-    findings: '鼓膜所見：左鼓膜軽度陥凹、右は概ね正常',
-    diagnosis: '混合性難聴（左優位）',
-    diseaseName: '混合性難聴',
+    chiefComplaint: '耳痛、聞こえの悪さ、耳閉塞感',
+    history: '2日前より耳痛と耳閉塞感あり',
+    findings: '鼓膜所見炎症（＋）',
+    diagnosis: '急性中耳炎（右）',
+    diseaseName: '急性中耳炎',
     tympanogram: { 
-      type: 'MIX', 
-      left: { peakPressure: -180, peakCompliance: 0.5, sigma: 80 },   // 左B型寄り（陰圧＋低コンプライアンス）
-      right: { peakPressure: 5, peakCompliance: 1.1, sigma: 60 }      // 右A型
+      type: 'MIX',
+      left: { peakPressure: 0, peakCompliance: 1.2, sigma: 60 },
+      right: { peakPressure: 100, peakCompliance: 0.6, sigma: 60 }
     }
   }
 };
