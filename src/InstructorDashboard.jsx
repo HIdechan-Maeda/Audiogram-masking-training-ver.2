@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseDisabled } from './supabaseClient';
-import { fetchAllUsageEvents, usageEventTypeLabel, formatUsageMetadataPreview } from './usageEvents';
+import { fetchAllUsageEvents, usageEventTypeLabel, formatUsageMetadataPreview, USAGE_EVENT } from './usageEvents';
 
 export default function InstructorDashboard({ instructor, onLogout }) {
   const [students, setStudents] = useState([]);
@@ -18,6 +18,7 @@ export default function InstructorDashboard({ instructor, onLogout }) {
   const itemsPerPage = 50;
   const [usageEvents, setUsageEvents] = useState([]);
   const [usageSearch, setUsageSearch] = useState('');
+  const [usageTypeFilter, setUsageTypeFilter] = useState('all');
 
   // データを読み込む
   const loadData = async () => {
@@ -173,10 +174,17 @@ export default function InstructorDashboard({ instructor, onLogout }) {
     student.student_id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredUsageEvents = usageEvents.filter((ev) =>
-    !usageSearch.trim() ||
-    String(ev.student_id || '').toLowerCase().includes(usageSearch.trim().toLowerCase())
-  );
+  const filteredUsageEvents = usageEvents.filter((ev) => {
+    const matchSearch =
+      !usageSearch.trim() ||
+      String(ev.student_id || '').toLowerCase().includes(usageSearch.trim().toLowerCase());
+    const matchType = usageTypeFilter === 'all' || ev.event_type === usageTypeFilter;
+    return matchSearch && matchType;
+  });
+
+  const clinicalUsageCount = usageEvents.filter(
+    (ev) => ev.event_type === USAGE_EVENT.CLINICAL_CASE_GENERATION
+  ).length;
 
   // ページネーション
   const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
@@ -296,19 +304,46 @@ export default function InstructorDashboard({ instructor, onLogout }) {
         {/* 使用履歴（全学生） */}
         <div className="bg-white rounded-2xl shadow p-4 mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
-            <h2 className="text-lg font-semibold text-gray-900">使用履歴ログ</h2>
-            <input
-              type="text"
-              placeholder="学生IDで絞り込み..."
-              value={usageSearch}
-              onChange={(e) => setUsageSearch(e.target.value)}
-              className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            />
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">使用履歴ログ</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                プリセット症例の進捗に加え、学生が「臨床症例生成」を実行した記録（臨床症例の生成）もここに表示されます（学生ログイン時）。
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto md:items-center">
+              <select
+                value={usageTypeFilter}
+                onChange={(e) => setUsageTypeFilter(e.target.value)}
+                className="w-full sm:w-48 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                aria-label="使用履歴の種別で絞り込み"
+              >
+                <option value="all">種別: すべて</option>
+                <option value={USAGE_EVENT.LOGIN}>ログイン</option>
+                <option value={USAGE_EVENT.DEFAULT_CASE_PROGRESS}>デフォルト症例の進捗</option>
+                <option value={USAGE_EVENT.CLINICAL_CASE_GENERATION}>臨床症例の生成</option>
+              </select>
+              <input
+                type="text"
+                placeholder="学生IDで絞り込み..."
+                value={usageSearch}
+                onChange={(e) => setUsageSearch(e.target.value)}
+                className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+            </div>
           </div>
+          {!isSupabaseDisabled && usageEvents.length > 0 && (
+            <p className="text-xs text-teal-700 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2 mb-3">
+              臨床症例の生成ログ: <span className="font-semibold">{clinicalUsageCount}</span> 件（取得件数内）
+            </p>
+          )}
           {isSupabaseDisabled ? (
             <p className="text-sm text-gray-500">Supabase が無効のため、使用履歴は取得できません。</p>
           ) : filteredUsageEvents.length === 0 ? (
-            <p className="text-sm text-gray-500">まだ使用履歴はありません。学生がログイン・学習を開始すると、ここに履歴が表示されます。</p>
+            <p className="text-sm text-gray-500">
+              {usageEvents.length === 0
+                ? 'まだ使用履歴はありません。学生がログイン・学習を開始すると、ここに履歴が表示されます。'
+                : '該当する履歴がありません。種別または学生IDの条件を変えてください。'}
+            </p>
           ) : (
             <div className="overflow-x-auto max-h-96 overflow-y-auto text-sm">
               <table className="w-full border-collapse">

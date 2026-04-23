@@ -86,9 +86,14 @@ export function formatUsageMetadataPreview(row) {
   if (row.event_type === USAGE_EVENT.LOGIN) return 'ログイン';
   if (row.event_type === USAGE_EVENT.CLINICAL_CASE_GENERATION) {
     const parts = [];
+    if (m.casePattern) parts.push(String(m.casePattern));
     if (m.disorderLabel) parts.push(String(m.disorderLabel));
     if (m.ageGroup) parts.push(String(m.ageGroup));
-    return parts.join(' / ') || '—';
+    if (m.affectedSide) parts.push(`患側 ${m.affectedSide}`);
+    if (m.rightProfile && m.leftProfile && m.rightProfile !== m.leftProfile) {
+      parts.push(`R:${m.rightProfile} / L:${m.leftProfile}`);
+    }
+    return parts.join(' · ') || '臨床自動生成';
   }
   if (row.event_type === USAGE_EVENT.DEFAULT_CASE_PROGRESS && m.snapshot) {
     const s = m.snapshot;

@@ -3460,9 +3460,23 @@ ${episodeHint ? `
       setCustomPresetDetails(caseInfo);
       setShowCaseInfoModal(false);
       if (currentStudentId) {
-        void logStudentUsageEvent(currentStudentId, userId, USAGE_EVENT.CLINICAL_CASE_GENERATION, {
+        let resolvedUserId = userId;
+        if (!isSupabaseDisabled && typeof supabase?.auth?.getSession === 'function') {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user?.id) resolvedUserId = session.user.id;
+          } catch (_) {
+            /* keep userId from state */
+          }
+        }
+        await logStudentUsageEvent(currentStudentId, resolvedUserId, USAGE_EVENT.CLINICAL_CASE_GENERATION, {
           disorderLabel: profileName,
           ageGroup: finalAgeGroup,
+          casePattern: casePatternForTests,
+          rightProfile: meta.rightProfile,
+          leftProfile: meta.leftProfile,
+          affectedSide: meta.affectedSide || null,
+          source: 'ai_auto_generate',
         });
         void (async () => {
           const { data: uh, error: uhErr } = await fetchStudentUsageEvents(currentStudentId, 150);
