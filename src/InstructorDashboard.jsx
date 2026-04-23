@@ -1,6 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, isSupabaseDisabled } from './supabaseClient';
-import { fetchAllUsageEvents, usageEventTypeLabel, formatUsageMetadataPreview, USAGE_EVENT } from './usageEvents';
+import {
+  fetchAllUsageEvents,
+  usageEventTypeLabel,
+  formatUsageMetadataPreview,
+  USAGE_EVENT,
+  DEFAULT_PRESET_KEYS,
+  countPresetCompletions,
+  averageAccuracyForPresets,
+} from './usageEvents';
 
 export default function InstructorDashboard({ instructor, onLogout }) {
   const [students, setStudents] = useState([]);
@@ -8,7 +16,8 @@ export default function InstructorDashboard({ instructor, onLogout }) {
     totalStudents: 0,
     activeStudents: 0,
     averageAccuracy: 0,
-    totalCompletedCases: 0,
+    totalPresetCompletions: 0,
+    totalClinicalGenerations: 0,
     todayActivity: 0,
   });
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -83,38 +92,46 @@ export default function InstructorDashboard({ instructor, onLogout }) {
         return lastUpdate >= todayStart;
       }).length;
 
-      const studentsWithAccuracy = studentsWithProgress.filter(s => 
-        s.progress && s.progress.caseAccuracy && Object.keys(s.progress.caseAccuracy).length > 0
-      );
+      const studentsWithPresetAccuracy = studentsWithProgress.filter((s) => {
+        const ca = s.progress?.caseAccuracy;
+        if (!ca) return false;
+        return DEFAULT_PRESET_KEYS.some((k) => ca[k] != null);
+      });
 
-      const averageAccuracy = studentsWithAccuracy.length > 0
+      const averageAccuracy = studentsWithPresetAccuracy.length > 0
         ? Math.round(
-            studentsWithAccuracy.reduce((sum, s) => {
-              const accuracies = Object.values(s.progress.caseAccuracy).map(c => c.accuracy || 0);
-              const avg = accuracies.reduce((a, b) => a + b, 0) / accuracies.length;
-              return sum + avg;
-            }, 0) / studentsWithAccuracy.length
+            studentsWithPresetAccuracy.reduce(
+              (sum, s) => sum + averageAccuracyForPresets(s.progress),
+              0
+            ) / studentsWithPresetAccuracy.length
           )
         : 0;
 
-      const totalCompletedCases = studentsWithProgress.reduce((sum, s) => {
-        return sum + (s.progress?.completedCases?.length || 0);
-      }, 0);
-
-      setStats({
-        totalStudents: studentsWithProgress.length,
-        activeStudents,
-        averageAccuracy,
-        totalCompletedCases,
-        todayActivity,
-      });
+      const totalPresetCompletions = studentsWithProgress.reduce(
+        (sum, s) => sum + countPresetCompletions(s.progress),
+        0
+      );
 
       const { data: usageData, error: usageErr } = await fetchAllUsageEvents(2000);
+      const totalClinicalGenerations =
+        !usageErr && usageData
+          ? usageData.filter((e) => e.event_type === USAGE_EVENT.CLINICAL_CASE_GENERATION).length
+          : 0;
+
       if (!usageErr && usageData) {
         setUsageEvents(usageData);
       } else if (usageErr) {
         console.warn('使用履歴の取得:', usageErr);
       }
+
+      setStats({
+        totalStudents: studentsWithProgress.length,
+        activeStudents,
+        averageAccuracy,
+        totalPresetCompletions,
+        totalClinicalGenerations,
+        todayActivity,
+      });
     } catch (error) {
       console.error('データ読み込みエラー:', error);
     } finally {
@@ -129,25 +146,59 @@ export default function InstructorDashboard({ instructor, onLogout }) {
     return () => clearInterval(interval);
   }, []);
 
+  // フィルタリング
+  const filteredStudents = students.filter(student =>
+    student.student_id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredUsageEvents = usageEvents.filter((ev) => {
+    const matchSearch =
+      !usageSearch.trim() ||
+      String(ev.student_id || '').toLowerCase().includes(usageSearch.trim().toLowerCase());
+    const matchType = usageTypeFilter === 'all' || ev.event_type === usageTypeFilter;
+    return matchSearch && matchType;
+  });
+
+  const clinicalUsageCount = usageEvents.filter(
+    (ev) => ev.event_type === USAGE_EVENT.CLINICAL_CASE_GENERATION
+  ).length;
+
+  /** 学生ID →「臨床症例の生成」使用履歴の件数（ログイン時の自動生成のみ蓄積） */
+  const clinicalGenByStudent = useMemo(() => {
+    const m = new Map();
+    for (const ev of usageEvents) {
+      if (ev.event_type === USAGE_EVENT.CLINICAL_CASE_GENERATION && ev.student_id) {
+        m.set(ev.student_id, (m.get(ev.student_id) || 0) + 1);
+      }
+    }
+    return m;
+  }, [usageEvents]);
+
   // CSVエクスポート
   const exportToCSV = () => {
-    const headers = ['学生ID', '登録日', '最終ログイン', '完了症例数', '総症例数', '平均精度', '総セッション数'];
-    const rows = filteredStudents.map(student => {
-      const completedCases = student.progress?.completedCases?.length || 0;
-      const totalCases = 8; // 症例A-H
-      const accuracies = student.progress?.caseAccuracy 
-        ? Object.values(student.progress.caseAccuracy).map(c => c.accuracy || 0)
-        : [];
-      const avgAccuracy = accuracies.length > 0
-        ? Math.round(accuracies.reduce((a, b) => a + b, 0) / accuracies.length)
-        : 0;
-      
+    const headers = [
+      '学生ID',
+      '登録日',
+      '最終ログイン',
+      'プリセット完了数(A〜H)',
+      'プリセット総数',
+      '臨床症例生成ログ回数',
+      'プリセット平均精度',
+      '総セッション数',
+    ];
+    const rows = filteredStudents.map((student) => {
+      const presetDone = countPresetCompletions(student.progress);
+      const totalPreset = DEFAULT_PRESET_KEYS.length;
+      const clinicalCount = clinicalGenByStudent.get(student.student_id) || 0;
+      const avgAccuracy = averageAccuracyForPresets(student.progress);
+
       return [
         student.student_id,
         new Date(student.created_at).toLocaleDateString('ja-JP'),
         student.lastProgressUpdate ? new Date(student.lastProgressUpdate).toLocaleDateString('ja-JP') : '未ログイン',
-        completedCases,
-        totalCases,
+        presetDone,
+        totalPreset,
+        clinicalCount,
         `${avgAccuracy}%`,
         student.progress?.totalSessions || 0,
       ];
@@ -168,23 +219,6 @@ export default function InstructorDashboard({ instructor, onLogout }) {
     link.click();
     document.body.removeChild(link);
   };
-
-  // フィルタリング
-  const filteredStudents = students.filter(student =>
-    student.student_id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const filteredUsageEvents = usageEvents.filter((ev) => {
-    const matchSearch =
-      !usageSearch.trim() ||
-      String(ev.student_id || '').toLowerCase().includes(usageSearch.trim().toLowerCase());
-    const matchType = usageTypeFilter === 'all' || ev.event_type === usageTypeFilter;
-    return matchSearch && matchType;
-  });
-
-  const clinicalUsageCount = usageEvents.filter(
-    (ev) => ev.event_type === USAGE_EVENT.CLINICAL_CASE_GENERATION
-  ).length;
 
   // ページネーション
   const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
@@ -250,7 +284,7 @@ export default function InstructorDashboard({ instructor, onLogout }) {
         </header>
 
         {/* 統計カード */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <div className="bg-blue-50 rounded-xl p-5 border border-blue-200">
             <div className="text-sm text-blue-600 font-medium mb-1">総学生数</div>
             <div className="text-3xl font-bold text-blue-800">{stats.totalStudents}</div>
@@ -261,18 +295,24 @@ export default function InstructorDashboard({ instructor, onLogout }) {
             <div className="text-xs text-green-600 mt-1">過去7日以内</div>
           </div>
           <div className="bg-orange-50 rounded-xl p-5 border border-orange-200">
-            <div className="text-sm text-orange-600 font-medium mb-1">平均精度</div>
+            <div className="text-sm text-orange-600 font-medium mb-1">平均精度（プリセット）</div>
             <div className="text-3xl font-bold text-orange-800">{stats.averageAccuracy}%</div>
+            <div className="text-xs text-orange-600 mt-1">症例A〜Hのみ</div>
           </div>
           <div className="bg-purple-50 rounded-xl p-5 border border-purple-200">
-            <div className="text-sm text-purple-600 font-medium mb-1">完了症例数</div>
-            <div className="text-3xl font-bold text-purple-800">{stats.totalCompletedCases}</div>
-            <div className="text-xs text-purple-600 mt-1">全学生合計</div>
+            <div className="text-sm text-purple-600 font-medium mb-1">プリセット完了（累計）</div>
+            <div className="text-3xl font-bold text-purple-800">{stats.totalPresetCompletions}</div>
+            <div className="text-xs text-purple-600 mt-1">A〜H の完了登録の合計</div>
+          </div>
+          <div className="bg-teal-50 rounded-xl p-5 border border-teal-200">
+            <div className="text-sm text-teal-600 font-medium mb-1">臨床症例の生成ログ</div>
+            <div className="text-3xl font-bold text-teal-800">{stats.totalClinicalGenerations}</div>
+            <div className="text-xs text-teal-600 mt-1">取得件数内・全学生</div>
           </div>
           <div className="bg-indigo-50 rounded-xl p-5 border border-indigo-200">
             <div className="text-sm text-indigo-600 font-medium mb-1">本日の活動</div>
             <div className="text-3xl font-bold text-indigo-800">{stats.todayActivity}</div>
-            <div className="text-xs text-indigo-600 mt-1">ログイン数</div>
+            <div className="text-xs text-indigo-600 mt-1">進捗更新があった学生数</div>
           </div>
         </div>
 
@@ -379,8 +419,18 @@ export default function InstructorDashboard({ instructor, onLogout }) {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学生ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">完了症例</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">平均精度</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    プリセット完了
+                    <span className="block font-normal normal-case text-gray-400">A〜H</span>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    臨床生成
+                    <span className="block font-normal normal-case text-gray-400">ログ回数</span>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    平均精度
+                    <span className="block font-normal normal-case text-gray-400">プリセット</span>
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">総セッション</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最終ログイン</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">アクション</th>
@@ -389,26 +439,22 @@ export default function InstructorDashboard({ instructor, onLogout }) {
               <tbody className="bg-white divide-y divide-gray-200">
                 {isLoading ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
                       データを読み込んでいます...
                     </td>
                   </tr>
                 ) : paginatedStudents.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
                       {searchTerm ? '検索結果が見つかりませんでした' : '学生データがありません'}
                     </td>
                   </tr>
                 ) : (
                   paginatedStudents.map((student) => {
-                    const completedCases = student.progress?.completedCases?.length || 0;
-                    const totalCases = 8;
-                    const accuracies = student.progress?.caseAccuracy
-                      ? Object.values(student.progress.caseAccuracy).map(c => c.accuracy || 0)
-                      : [];
-                    const avgAccuracy = accuracies.length > 0
-                      ? Math.round(accuracies.reduce((a, b) => a + b, 0) / accuracies.length)
-                      : 0;
+                    const presetDone = countPresetCompletions(student.progress);
+                    const totalPreset = DEFAULT_PRESET_KEYS.length;
+                    const clinicalCount = clinicalGenByStudent.get(student.student_id) || 0;
+                    const avgAccuracy = averageAccuracyForPresets(student.progress);
 
                     return (
                       <tr key={student.id} className="hover:bg-gray-50">
@@ -417,14 +463,18 @@ export default function InstructorDashboard({ instructor, onLogout }) {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            {completedCases}/{totalCases}
+                            {presetDone}/{totalPreset}
                           </div>
                           <div className="w-32 bg-gray-200 rounded-full h-2 mt-1">
                             <div
                               className="bg-blue-600 h-2 rounded-full"
-                              style={{ width: `${(completedCases / totalCases) * 100}%` }}
+                              style={{ width: `${(presetDone / totalPreset) * 100}%` }}
                             />
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{clinicalCount}</div>
+                          <div className="text-xs text-gray-500">臨床症例の生成</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className={`text-sm font-semibold ${
@@ -543,15 +593,24 @@ export default function InstructorDashboard({ instructor, onLogout }) {
                   <>
                     <div className="bg-blue-50 rounded-lg p-4">
                       <h3 className="font-semibold text-gray-800 mb-3">進捗サマリー</h3>
-                      <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         <div>
                           <span className="text-gray-600">総セッション数:</span>{' '}
                           <span className="font-medium">{selectedStudent.progress.totalSessions || 0}</span>
                         </div>
                         <div>
-                          <span className="text-gray-600">完了症例数:</span>{' '}
+                          <span className="text-gray-600">プリセット完了（A〜H）:</span>{' '}
                           <span className="font-medium">
-                            {selectedStudent.progress.completedCases?.length || 0}/8
+                            {countPresetCompletions(selectedStudent.progress)}/{DEFAULT_PRESET_KEYS.length}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">臨床症例の生成（ログ）:</span>{' '}
+                          <span className="font-medium">
+                            {clinicalGenByStudent.get(selectedStudent.student_id) || 0} 回
+                          </span>
+                          <span className="text-gray-500 text-xs block mt-0.5">
+                            使用履歴の「臨床症例の生成」件数です
                           </span>
                         </div>
                         <div>
@@ -568,7 +627,7 @@ export default function InstructorDashboard({ instructor, onLogout }) {
                     {/* 症例別進捗 */}
                     {selectedStudent.progress.caseAccuracy && Object.keys(selectedStudent.progress.caseAccuracy).length > 0 && (
                       <div className="bg-green-50 rounded-lg p-4">
-                        <h3 className="font-semibold text-gray-800 mb-3">症例別進捗</h3>
+                        <h3 className="font-semibold text-gray-800 mb-3">プリセット症例別進捗（A〜H）</h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map(caseId => {
                             const caseData = selectedStudent.progress.caseAccuracy[caseId];

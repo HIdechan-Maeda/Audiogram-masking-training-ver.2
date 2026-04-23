@@ -6,10 +6,30 @@ export const USAGE_EVENT = {
   CLINICAL_CASE_GENERATION: 'clinical_case_generation',
 };
 
-const PRESET_KEYS_DEFAULT = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+/** プリセット症例（講師ダッシュの「完了」はこの8症例のみを指す） */
+export const DEFAULT_PRESET_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+/** 完了リストのうちプリセット A〜H のユニーク件数 */
+export function countPresetCompletions(progress, presetKeys = DEFAULT_PRESET_KEYS) {
+  const list = progress?.completedCases;
+  if (!Array.isArray(list) || list.length === 0) return 0;
+  const inPreset = list.filter((c) => presetKeys.includes(c));
+  return new Set(inPreset).size;
+}
+
+/** caseAccuracy のうちプリセットキーだけで平均精度（臨床・Custom は含めない） */
+export function averageAccuracyForPresets(progress, presetKeys = DEFAULT_PRESET_KEYS) {
+  const caseAccuracy = progress?.caseAccuracy;
+  if (!caseAccuracy || typeof caseAccuracy !== 'object') return 0;
+  const vals = presetKeys
+    .filter((k) => caseAccuracy[k] != null)
+    .map((k) => Number(caseAccuracy[k].accuracy) || 0);
+  if (vals.length === 0) return 0;
+  return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+}
 
 /** デフォルト症例（A〜H）のみの進捗スナップショット */
-export function buildDefaultPresetProgressSnapshot(progress, presetKeys = PRESET_KEYS_DEFAULT) {
+export function buildDefaultPresetProgressSnapshot(progress, presetKeys = DEFAULT_PRESET_KEYS) {
   if (!progress || typeof progress !== 'object') {
     return { completedCases: [], caseAccuracy: {}, totalSessions: 0, lastSessionDate: null };
   }
@@ -98,7 +118,7 @@ export function formatUsageMetadataPreview(row) {
   if (row.event_type === USAGE_EVENT.DEFAULT_CASE_PROGRESS && m.snapshot) {
     const s = m.snapshot;
     const done = (s.completedCases && s.completedCases.length) || 0;
-    return `完了症例 ${done}/8 · セッション ${s.totalSessions ?? 0}`;
+    return `プリセット完了 ${done}/8 · セッション ${s.totalSessions ?? 0}`;
   }
   return '—';
 }
