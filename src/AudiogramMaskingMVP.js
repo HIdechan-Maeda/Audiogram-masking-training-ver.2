@@ -4086,6 +4086,7 @@ ${episodeHint ? `
   // clicking on chart -> add/replace point for current ear/trans/masked+freq
   function addOrReplacePoint(p, opts) {
     const disableBlinkAfter = opts && typeof opts.disableBlinkAfter === 'boolean' ? opts.disableBlinkAfter : true;
+    const source = opts && typeof opts.source === 'string' ? opts.source : 'threshold-button';
     if (p.transducer === 'BC' && BC_DISABLED.has(p.freq)) {
       setSuppressLamp(true);
       return;
@@ -4117,7 +4118,8 @@ ${episodeHint ? `
         masked: p3.masked,
         maskLevel: masked ? maskLevel : -15,
         so: !!p3.so,
-        caseId: selectedPreset
+        caseId: selectedPreset,
+        source
       };
       setMeasurementLog(prev => [...prev, logEntry]);
       // DBへ保存（匿名ユーザー単位）
@@ -5852,7 +5854,7 @@ ${targets.map((target, index) => {
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       <button
-                        onClick={() => addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(level) }, { disableBlinkAfter: true })}
+                        onClick={() => addOrReplacePoint({ ear, transducer: trans, masked, freq, dB: round5(level) }, { disableBlinkAfter: true, source: 'threshold-button' })}
                         className="w-20 h-20 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors active:scale-95 transform text-sm font-semibold leading-tight flex items-center justify-center text-center"
                         title="現在の周波数・レベルで閾値をプロットします"
                       >
@@ -5970,7 +5972,9 @@ ${targets.map((target, index) => {
                   <div 
                     key={entry.id} 
                     className={`p-3 rounded-lg border text-sm ${
-                      entry.masked 
+                      entry.source === 'threshold-button'
+                        ? 'bg-violet-50 border-violet-300'
+                        : entry.masked
                         ? 'bg-blue-50 border-blue-200' 
                         : 'bg-green-50 border-green-200'
                     }`}
@@ -5983,6 +5987,13 @@ ${targets.map((target, index) => {
                         {entry.timestamp}
                       </span>
                     </div>
+                    {entry.source === 'threshold-button' && (
+                      <div className="mb-1">
+                        <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700">
+                          閾値決定で記録
+                        </span>
+                      </div>
+                    )}
                     <div className="space-y-1">
                       <div className="font-semibold">
                         {entry.freq}Hz {entry.dB}dB
