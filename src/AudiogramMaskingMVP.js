@@ -1968,6 +1968,74 @@ ${episodeHint ? `
   // AI生成: 症例の詳細情報を生成する関数（非同期版：OpenAI統合）
   // lateralityInfo: { affectedSide: 'R'|'L'|null, profileName, rightProfile, leftProfile } 片側難聴時の主訴で患側を反映
   const generateCaseDetails = async (generatedTargets, casePattern, generatedAge = null, patternAnalysis = null, lateralityInfo = null) => {
+    const profileToDbKey = {
+      CHL_AOM: 'AOM',
+      CHL_OME: 'OME',
+      CHL_Otosclerosis: 'Otosclerosis',
+      CHL_OssicularDiscontinuity: 'Ossicular_Discontinuity',
+      SNHL_Sudden: 'SUDDEN',
+      SNHL_Meniere: 'MENIERE',
+      SNHL_NoiseNotch: 'NOISE',
+      SNHL_Age: 'PRESBYCUSIS',
+      SNHL_Mumps: 'MUMPS',
+      Normal: 'NORMAL',
+      NormalHearing: 'NORMAL'
+    };
+    const disorderNameToDbKey = {
+      '急性中耳炎': 'AOM', '滲出性中耳炎': 'OME', '耳硬化症': 'Otosclerosis',
+      '耳小骨離断': 'Ossicular_Discontinuity', 'ムンプス難聴': 'MUMPS',
+      '突発性難聴': 'SUDDEN', 'メニエール病': 'MENIERE', '騒音性難聴': 'NOISE',
+      '加齢性難聴': 'PRESBYCUSIS', '正常': 'NORMAL'
+    };
+    const isNormalProfile = (p) => !p || p === 'Normal' || p === 'NormalHearing';
+    const resolveAffectedSide = () => {
+      if (lateralityInfo?.affectedSide === 'R' || lateralityInfo?.affectedSide === 'L') return lateralityInfo.affectedSide;
+      const rightProfile = lateralityInfo?.rightProfile || null;
+      const leftProfile = lateralityInfo?.leftProfile || null;
+      if (rightProfile && leftProfile) {
+        if (!isNormalProfile(rightProfile) && isNormalProfile(leftProfile)) return 'R';
+        if (!isNormalProfile(leftProfile) && isNormalProfile(rightProfile)) return 'L';
+        if (!isNormalProfile(rightProfile) && !isNormalProfile(leftProfile)) return 'B';
+      }
+      return 'B';
+    };
+    const resolvedAffectedSide = resolveAffectedSide();
+    const desiredGender = (lateralityInfo?.desiredGender || '').trim();
+    const dbKeyFromProfile =
+      profileToDbKey[lateralityInfo?.profileName]
+      || profileToDbKey[lateralityInfo?.rightProfile]
+      || profileToDbKey[lateralityInfo?.leftProfile]
+      || null;
+    const isGenderMatch = (candidateGender, targetGender) => {
+      if (!targetGender) return true;
+      const c = (candidateGender || '').trim();
+      if (!c) return true;
+      if (targetGender === c) return true;
+      const norm = (v) => {
+        if (!v) return '';
+        if (v === '男性' || v === '男') return '男性';
+        if (v === '女性' || v === '女') return '女性';
+        return v;
+      };
+      return norm(targetGender) === norm(c);
+    };
+    const normalizeTextByAge = (text, ageValue) => {
+      const base = (text || '').trim();
+      if (!base) return base;
+      if (ageValue <= 18) {
+        return base
+          .replace(/職場の健康診断/g, '学校健診')
+          .replace(/職場健診/g, '学校健診')
+          .replace(/職場/g, '学校');
+      }
+      if (ageValue >= 23) {
+        return base
+          .replace(/学校検診/g, '健康診断')
+          .replace(/学校健診/g, '健康診断');
+      }
+      return base;
+    };
+
     // まず Tym 作成 → タイプ分類 → 症例検索（文面取得）
     const generateTymType = (pattern) => {
       if (pattern === 'conductive') return Math.random() < 0.7 ? 'B' : (Math.random() < 0.5 ? 'C' : 'Ad');
@@ -2003,19 +2071,57 @@ ${episodeHint ? `
     // プロファイルでAOM/OMEが決まっている場合はdiseaseKeyをそれに合わせる（AOM=C型・OME=B〜Cのため）
     const diseaseKey = (profile === 'CHL_AOM' ? 'AOM' : profile === 'CHL_OME' ? 'OME' : null) || mapTymToDisease(tympType);
 
+    // 年齢を先に決めて、DBの年齢レンジ整合に利用する
+    let age;
+    if (generatedAge !== null) {
+      age = generatedAge;
+    } else {
+      const patterns = {
+        normal: { ageRange: [5, 50] },
+        sensorineural: { ageRange: [30, 80] },
+        conductive: { ageRange: [5, 50] },
+        mixed: { ageRange: [40, 75] }
+      };
+      const agePattern = patterns[casePattern] || patterns.sensorineural;
+      age = Math.floor(Math.random() * (agePattern.ageRange[1] - agePattern.ageRange[0] + 1)) + agePattern.ageRange[0];
+    }
+
     // 症例文: まずDBから症例を取得し主訴・鼓膜所見を使う。なければLLMで生成
     let selectedDisorder = patternAnalysis?.possibleDisorders?.[0]?.disorder || null;
-    const disorderNameToDbKey = {
-      '急性中耳炎': 'AOM', '滲出性中耳炎': 'OME', '耳硬化症': 'Otosclerosis',
-      '耳小骨離断': 'Ossicular_Discontinuity', 'ムンプス難聴': 'MUMPS',
-      '突発性難聴': 'SUDDEN', 'メニエール病': 'MENIERE', '騒音性難聴': 'NOISE',
-      '加齢性難聴': 'PRESBYCUSIS', '正常': 'NORMAL'
-    };
-    const dbKey = diseaseKey || (selectedDisorder?.name ? disorderNameToDbKey[selectedDisorder.name] : null) || (casePattern === 'normal' ? 'NORMAL' : null);
+    const dbKey = dbKeyFromProfile || diseaseKey || (selectedDisorder?.name ? disorderNameToDbKey[selectedDisorder.name] : null) || (casePattern === 'normal' ? 'NORMAL' : null);
     let dbCase = null;
     if (dbKey) {
       try {
-        dbCase = await pickCaseFromDatabase(dbKey, tympType);
+        // DB中心運用: 複数候補を引いて、年齢・性別の整合性スコアで最適な文面を選ぶ
+        let bestCase = null;
+        let bestScore = Number.NEGATIVE_INFINITY;
+        for (let i = 0; i < 8; i++) {
+          const candidate = await pickCaseFromDatabase(dbKey, tympType);
+          if (!candidate) continue;
+          let score = 0;
+          const minAge = Number.isFinite(candidate.age_min) ? candidate.age_min : null;
+          const maxAge = Number.isFinite(candidate.age_max) ? candidate.age_max : null;
+          if (minAge != null && maxAge != null) {
+            if (age >= minAge && age <= maxAge) score += 3;
+            else score -= 3;
+          } else if (minAge != null || maxAge != null) {
+            const min = minAge != null ? minAge : -Infinity;
+            const max = maxAge != null ? maxAge : Infinity;
+            if (age >= min && age <= max) score += 2;
+            else score -= 2;
+          }
+          if (desiredGender) {
+            score += isGenderMatch(candidate.gender, desiredGender) ? 2 : -2;
+          }
+          if ((candidate.chiefComplaint || '').trim().length > 0) score += 1;
+          if ((candidate.otoscopy || '').trim().length > 0) score += 1;
+          if ((candidate.hpi || '').trim().length > 0) score += 1;
+          if (score > bestScore) {
+            bestScore = score;
+            bestCase = candidate;
+          }
+        }
+        dbCase = bestCase || await pickCaseFromDatabase(dbKey, tympType);
       } catch (e) {
         console.warn('[Audioscope EDU] 症例DB取得失敗:', dbKey, e?.message);
       }
@@ -2034,30 +2140,6 @@ ${episodeHint ? `
       );
     }
 
-    // 年齢を決める（既に生成されていればそれを使用、なければパターンに応じて生成）
-    let age;
-    if (generatedAge !== null) {
-      age = generatedAge;
-    } else {
-      // フォールバック：パターンに応じて年齢を生成
-      const patterns = {
-        normal: {
-          ageRange: [5, 50], // ISO 7029に基づき拡大
-        },
-        sensorineural: {
-          ageRange: [30, 80],
-        },
-        conductive: {
-          ageRange: [5, 50],
-        },
-        mixed: {
-          ageRange: [40, 75],
-        }
-      };
-      const agePattern = patterns[casePattern] || patterns.sensorineural;
-      age = Math.floor(Math.random() * (agePattern.ageRange[1] - agePattern.ageRange[0] + 1)) + agePattern.ageRange[0];
-    }
-
     // 文面決定（DB症例 > LLM結果 > 疾患別テンプレート > 汎用テンプレート）。主訴・鼓膜所見は同一疾患で一致させる
     const disorderFallbacks = {
       Otosclerosis: { chiefComplaint: '徐々に聞こえが悪くなってきた。家族に難聴の人がいる。', otoscopy: '鼓膜所見はおおむね正常、As型、反射消失' },
@@ -2070,9 +2152,19 @@ ${episodeHint ? `
       || (lateralityInfo?.affectedSide ? (lateralityInfo.affectedSide === 'R' ? '右耳の聞こえが悪い' : '左耳の聞こえが悪い') : (casePattern === 'conductive' ? '聞こえにくい／耳がつまる' : '聞き取りにくい'));
     const fallbackOtoscopy = disorderFallback?.otoscopy
       || (tympType === 'B' ? '鼓膜混濁・膨隆、光錐消失' : tympType === 'As' ? '鼓膜正常、可動性低下を示唆' : tympType === 'Ad' ? '鼓膜正常、可動性過大を示唆' : '鼓膜所見正常');
-    const genChiefComplaint = (dbCase?.chiefComplaint || '').trim() || (aiResult?.chiefComplaint || '').trim() || fallbackChiefComplaint;
-    const genOtoscopy = (dbCase?.otoscopy || '').trim() || (aiResult?.otoscopy) || fallbackOtoscopy;
-    const genGender = (dbCase?.gender || '').trim() || aiResult?.gender || (Math.random() < 0.5 ? '男性' : '女性');
+    const sideLabel = resolvedAffectedSide === 'R' ? '右耳' : resolvedAffectedSide === 'L' ? '左耳' : '両耳';
+    const ensureChiefComplaintSide = (text) => {
+      const base = (text || '').trim();
+      if (!base) return base;
+      if (/[左右両]耳/.test(base)) return base;
+      if (resolvedAffectedSide === 'R' || resolvedAffectedSide === 'L') return `${sideLabel}の${base}`;
+      return `両耳の${base}`;
+    };
+    const rawChiefComplaint = (dbCase?.chiefComplaint || '').trim() || (aiResult?.chiefComplaint || '').trim() || fallbackChiefComplaint;
+    const genChiefComplaint = ensureChiefComplaintSide(normalizeTextByAge(rawChiefComplaint, age));
+    const genOtoscopy = normalizeTextByAge((dbCase?.otoscopy || '').trim() || (aiResult?.otoscopy) || fallbackOtoscopy, age);
+    const genHistory = normalizeTextByAge((dbCase?.hpi || '').trim(), age);
+    const genGender = desiredGender || (dbCase?.gender || '').trim() || aiResult?.gender || (Math.random() < 0.5 ? '男性' : '女性');
 
     // ここでTym型を症例情報に付与（UI側で利用）
     const tympTypeStr = tympType;
@@ -2217,14 +2309,19 @@ ${episodeHint ? `
       ageGroup: ageGroup, // 10代ごとのグループ化された年齢を追加
       gender: genGender,
       chiefComplaint: genChiefComplaint,
+      history: genHistory,
       otoscopy: genOtoscopy,
       explanation: aiResult?.explanation || '',
+      selectedDisorderKey: dbKey || null,
+      affectedSide: resolvedAffectedSide,
       tympanogram: tympanogramObj,
       meta: {
         ...(tympanogramObj?.meta || {}),
         isOMECase,
         generatedTargets, // AC値を後で参照できるように保存
-        ageGroup: ageGroup // metaにも保存
+        ageGroup: ageGroup, // metaにも保存
+        affectedSide: resolvedAffectedSide,
+        selectedDisorderKey: dbKey || null
       }
     };
     
@@ -3419,7 +3516,8 @@ ${episodeHint ? `
         affectedSide: meta.affectedSide || null,
         profileName,
         rightProfile: meta.rightProfile,
-        leftProfile: meta.leftProfile
+        leftProfile: meta.leftProfile,
+        desiredGender: genderLabel || ''
       };
       let caseDetails = await generateCaseDetails(targets, casePatternForTests, generatedAge, patternAnalysis, lateralityInfo);
       // generateCaseDetailsが返すtympanogramがない場合は、simpleTympanogramを使用
@@ -3448,6 +3546,7 @@ ${episodeHint ? `
         rightProfile: meta.rightProfile,
         leftProfile: meta.leftProfile,
         chiefComplaint: caseDetails.chiefComplaint || '聞こえにくさを自覚',
+        history: caseDetails.history || '',
         otoscopy: caseDetails.otoscopy || '鼓膜所見正常',
         explanation: caseDetails.explanation || '',
         tympanogram: simpleTympanogram,
