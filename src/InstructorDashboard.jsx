@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, isSupabaseDisabled } from './supabaseClient';
 import {
   fetchAllUsageEvents,
@@ -26,11 +26,12 @@ export default function InstructorDashboard({ instructor, onLogout }) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
   const [usageEvents, setUsageEvents] = useState([]);
+  const [usageEventsLoading, setUsageEventsLoading] = useState(false);
   const [usageSearch, setUsageSearch] = useState('');
   const [usageTypeFilter, setUsageTypeFilter] = useState('all');
 
-  // データを読み込む
-  const loadData = async () => {
+  /** 学生・進捗のみ（手動更新時に取得。使用履歴は含めない） */
+  const loadStudentsData = useCallback(async () => {
     setIsLoading(true);
     try {
       // 全学生を取得
@@ -112,6 +113,26 @@ export default function InstructorDashboard({ instructor, onLogout }) {
         0
       );
 
+      setStats((prev) => ({
+        totalStudents: studentsWithProgress.length,
+        activeStudents,
+        averageAccuracy,
+        totalPresetCompletions,
+        totalClinicalGenerations: prev.totalClinicalGenerations,
+        todayActivity,
+      }));
+    } catch (error) {
+      console.error('データ読み込みエラー:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  /** 使用履歴ログ（初回表示・手動更新時のみ。自動ポーリングしない） */
+  const loadUsageEvents = useCallback(async () => {
+    if (isSupabaseDisabled) return;
+    setUsageEventsLoading(true);
+    try {
       const { data: usageData, error: usageErr } = await fetchAllUsageEvents(2000);
       const totalClinicalGenerations =
         !usageErr && usageData
@@ -124,27 +145,26 @@ export default function InstructorDashboard({ instructor, onLogout }) {
         console.warn('使用履歴の取得:', usageErr);
       }
 
-      setStats({
-        totalStudents: studentsWithProgress.length,
-        activeStudents,
-        averageAccuracy,
-        totalPresetCompletions,
+      setStats((prev) => ({
+        ...prev,
         totalClinicalGenerations,
-        todayActivity,
-      });
+      }));
     } catch (error) {
-      console.error('データ読み込みエラー:', error);
+      console.error('使用履歴の読み込みエラー:', error);
     } finally {
-      setIsLoading(false);
+      setUsageEventsLoading(false);
     }
-  };
+  }, []);
+
+  const loadAllData = useCallback(async () => {
+    await loadStudentsData();
+    await loadUsageEvents();
+  }, [loadStudentsData, loadUsageEvents]);
 
   useEffect(() => {
-    loadData();
-    // 30秒ごとにデータを更新
-    const interval = setInterval(loadData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    loadStudentsData();
+    loadUsageEvents();
+  }, [loadStudentsData, loadUsageEvents]);
 
   // フィルタリング
   const filteredStudents = students.filter(student =>
@@ -247,7 +267,7 @@ export default function InstructorDashboard({ instructor, onLogout }) {
       if (error) throw error;
 
       alert('進捗データをリセットしました');
-      loadData();
+      loadStudentsData();
       setSelectedStudent(null);
     } catch (error) {
       console.error('リセットエラー:', error);
@@ -264,14 +284,15 @@ export default function InstructorDashboard({ instructor, onLogout }) {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Audioscope EDU - 講師用ダッシュボード</h1>
               <p className="text-sm text-gray-600 mt-1">講師: {instructor.name}</p>
+              <p className="text-xs text-gray-500 mt-0.5">学生データ・使用履歴は自動更新されません。「更新」で最新を取得してください。</p>
             </div>
             <div className="flex items-center gap-4">
               <button
-                onClick={loadData}
+                onClick={loadAllData}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                disabled={isLoading}
+                disabled={isLoading || usageEventsLoading}
               >
-                {isLoading ? '更新中...' : '🔄 更新'}
+                {isLoading || usageEventsLoading ? '更新中...' : '🔄 更新'}
               </button>
               <button
                 onClick={onLogout}
@@ -348,9 +369,18 @@ export default function InstructorDashboard({ instructor, onLogout }) {
               <h2 className="text-lg font-semibold text-gray-900">使用履歴ログ</h2>
               <p className="text-xs text-gray-500 mt-1">
                 プリセット症例の進捗に加え、学生が「臨床症例生成」を実行した記録（臨床症例の生成）もここに表示されます（学生ログイン時）。
+                履歴は自動更新されません。最新を見るときは「履歴を更新」またはヘッダーの「更新」を押してください。
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto md:items-center">
+              <button
+                type="button"
+                onClick={loadUsageEvents}
+                disabled={usageEventsLoading || isSupabaseDisabled}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap"
+              >
+                {usageEventsLoading ? '読込中…' : '履歴を更新'}
+              </button>
               <select
                 value={usageTypeFilter}
                 onChange={(e) => setUsageTypeFilter(e.target.value)}
@@ -371,9 +401,20 @@ export default function InstructorDashboard({ instructor, onLogout }) {
               />
             </div>
           </div>
-          {!isSupabaseDisabled && usageEvents.length > 0 && (
-            <p className="text-xs text-teal-700 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2 mb-3">
+          {!isSupabaseDisabled && (
+            <p
+              className={`text-xs rounded-lg px-3 py-2 mb-3 border ${
+                clinicalUsageCount > 0
+                  ? 'text-teal-800 bg-teal-50 border-teal-100'
+                  : 'text-gray-700 bg-gray-50 border-gray-200'
+              }`}
+            >
               臨床症例の生成ログ: <span className="font-semibold">{clinicalUsageCount}</span> 件（取得件数内）
+              {clinicalUsageCount === 0 && (
+                <span className="block mt-1.5 text-gray-600">
+                  まだ誰も生成していないか、ログイン前に生成していると件数は増えません。行が増えるのはログイン後に「臨床症例生成」を押したときだけです。
+                </span>
+              )}
             </p>
           )}
           {isSupabaseDisabled ? (
@@ -382,7 +423,9 @@ export default function InstructorDashboard({ instructor, onLogout }) {
             <p className="text-sm text-gray-500">
               {usageEvents.length === 0
                 ? 'まだ使用履歴はありません。学生がログイン・学習を開始すると、ここに履歴が表示されます。'
-                : '該当する履歴がありません。種別または学生IDの条件を変えてください。'}
+                : usageTypeFilter === USAGE_EVENT.CLINICAL_CASE_GENERATION
+                  ? '臨床症例の生成ログはまだありません。種別を「すべて」にすると、ログインやプリセット進捗の記録は表示されます。'
+                  : '該当する履歴がありません。種別または学生IDの条件を変えてください。'}
             </p>
           ) : (
             <div className="overflow-x-auto max-h-96 overflow-y-auto text-sm">
