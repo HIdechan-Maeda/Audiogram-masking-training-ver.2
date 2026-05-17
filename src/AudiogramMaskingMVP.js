@@ -4631,7 +4631,8 @@ ${episodeHint ? `
       ].join(','))
     ].join('\n');
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    // UTF-8 BOM: Windows Excel が UTF-8 として認識するために必要
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
@@ -5064,9 +5065,34 @@ ${targets.map((target, index) => {
           {isSupabaseDisabled ? (
             <p className="text-sm text-gray-500">Supabase が無効のため、使用履歴は保存・表示されません。</p>
           ) : usageHistory.length === 0 ? (
-            <p className="text-sm text-gray-500">まだ記録がありません。ログイン・学習・臨床症例生成で記録されます。</p>
+            <div className="text-sm text-gray-500 space-y-2">
+              <p>まだ記録がありません。ログイン後の学習や臨床症例生成で、ここに1行ずつ追加されます。</p>
+              <p className="text-xs text-gray-500">
+                臨床症例の生成だけを見たい場合も、実行ログは学生IDでログインしたあとに「臨床症例生成」を押したときのみ残ります。未ログインのまま生成しても一覧には出ません。
+              </p>
+            </div>
           ) : (
             <div className="overflow-x-auto max-h-72 overflow-y-auto text-sm">
+              {(() => {
+                const clinicalRows = usageHistory.filter(
+                  (r) => r.event_type === USAGE_EVENT.CLINICAL_CASE_GENERATION
+                );
+                const n = clinicalRows.length;
+                return (
+                  <p
+                    className={`text-xs mb-2 pb-2 border-b ${
+                      n > 0 ? 'text-teal-800 border-teal-100' : 'text-gray-600 border-gray-100'
+                    }`}
+                  >
+                    この一覧のうち「臨床症例の生成」: <span className="font-semibold">{n}</span> 件
+                    {n === 0 && (
+                      <span className="block mt-1 text-gray-500">
+                        まだ臨床生成のログはありません。下の表はログインやプリセット進捗などの記録です。
+                      </span>
+                    )}
+                  </p>
+                );
+              })()}
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="text-left text-gray-600 border-b">
