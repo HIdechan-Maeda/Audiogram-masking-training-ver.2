@@ -4204,9 +4204,10 @@ ${episodeHint ? `
       return [...others, p3].sort((a,b)=> (a.freq-b.freq) || (a.dB-b.dB));
     });
 
-    // Add to measurement log only when lamp is on (response detected)
+    // 測定ログ: 応答あり、閾値決定、またはスケールアウト（最大レベル無応答）を記録
     const lampOn = hearsAtLevel(p3.ear, p3.transducer, p3.freq, p3.dB);
-    if (lampOn) {
+    const shouldLog = lampOn || !!p3.so || source === 'threshold-button';
+    if (shouldLog) {
       const logEntry = {
         id: Date.now(),
         timestamp: new Date().toLocaleTimeString(),
@@ -6087,8 +6088,8 @@ ${targets.map((target, index) => {
           
           {measurementLog.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
-              まだ応答記録がありません。<br/>
-              応答ランプが点灯した時に記録が追加されます。
+              まだ測定ログがありません。<br/>
+              「閾値決定」で打点した記録（スケールアウト含む）がここに表示されます。
             </div>
           ) : (
             <div className="max-h-64 overflow-y-auto">
