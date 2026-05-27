@@ -74,6 +74,13 @@ function inferCasePatternFromProfile(profileName) {
   return 'sensorineural';
 }
 
+function inferCasePatternFromDisorderName(diseaseName) {
+  if (!diseaseName || diseaseName === '正常') return 'normal';
+  if (/中耳炎|耳硬化|耳小骨|伝音/.test(diseaseName)) return 'conductive';
+  if (/メニエール|突発|感音|難聴|加齢|騒音|NIHL/.test(diseaseName)) return 'sensorineural';
+  return 'sensorineural';
+}
+
 // ISO 7029: 正常聴力閾値の疫学データ（年齢別・周波数別）
 // 単位: dB HL, 周波数: 1000, 2000, 4000 Hz
 const NORMAL_HEARING_THRESHOLDS_ISO7029 = {
@@ -507,8 +514,10 @@ function buildArtConfig(presetTargets, tympanogram, disorderName = null, casePat
 
     const elevateContralateral = (earKey) => {
       freqs.forEach(freq => {
-        const base = ART_NORMAL_THRESHOLDS[freq]?.cont ?? 85;
-        ensureOverride(earKey, 'contralateralOverride')[freq] = base + elevation;
+        const contBase = ART_NORMAL_THRESHOLDS[freq]?.cont ?? 85;
+        const ipsiBase = ART_NORMAL_THRESHOLDS[freq]?.ipsi ?? 80;
+        ensureOverride(earKey, 'contralateralOverride')[freq] = contBase + elevation;
+        ensureOverride(earKey, 'ipsilateralOverride')[freq] = ipsiBase;
       });
     };
 
@@ -626,6 +635,43 @@ function buildArtConfig(presetTargets, tympanogram, disorderName = null, casePat
       markAttenuated('right');
       markAttenuated('left');
     }
+  }
+
+  // 片側伝音障害（AOM/OME/耳小骨離断以外、または疾患判定漏れ時）のフォールバック
+  const artFreqs = [500, 1000, 2000];
+  const contElevation = 15;
+  const ensureArtOverride = (earKey, key) => {
+    if (!artConfig[earKey][key]) artConfig[earKey][key] = {};
+    return artConfig[earKey][key];
+  };
+  const markAbsentEar = (earKey) => {
+    artFreqs.forEach(freq => {
+      ensureArtOverride(earKey, 'ipsilateralOverride')[freq] = 999;
+      ensureArtOverride(earKey, 'contralateralOverride')[freq] = 999;
+    });
+  };
+  const elevateNormalEar = (normalEarKey) => {
+    artFreqs.forEach(freq => {
+      const contBase = ART_NORMAL_THRESHOLDS[freq]?.cont ?? 85;
+      const ipsiBase = ART_NORMAL_THRESHOLDS[freq]?.ipsi ?? 80;
+      ensureArtOverride(normalEarKey, 'contralateralOverride')[freq] = contBase + contElevation;
+      ensureArtOverride(normalEarKey, 'ipsilateralOverride')[freq] = ipsiBase;
+    });
+  };
+  const earHasArtOverride = (earKey) => {
+    const cfg = artConfig[earKey];
+    return !!(cfg.ipsilateralOverride || cfg.contralateralOverride);
+  };
+
+  const rightIsConductive = artConfig.right.tympanogramType === 'B';
+  const leftIsConductive = artConfig.left.tympanogramType === 'B';
+
+  if (rightIsConductive && !leftIsConductive && !earHasArtOverride('right') && !earHasArtOverride('left')) {
+    markAbsentEar('right');
+    elevateNormalEar('left');
+  } else if (leftIsConductive && !rightIsConductive && !earHasArtOverride('left') && !earHasArtOverride('right')) {
+    markAbsentEar('left');
+    elevateNormalEar('right');
   }
 
   return artConfig;
@@ -1012,10 +1058,12 @@ const PRESET_MAP = {
 
 Object.keys(PRESET_DETAILS).forEach(caseId => {
   const preset = PRESET_MAP[caseId];
-  const tympanogram = PRESET_DETAILS[caseId].tympanogram;
+  const details = PRESET_DETAILS[caseId];
+  const tympanogram = details.tympanogram;
   if (preset && tympanogram) {
-    PRESET_DETAILS[caseId].artConfig = buildArtConfig(preset.targets, tympanogram);
-    PRESET_DETAILS[caseId].dpoaeConfig = buildDPOAEConfig(preset.targets, tympanogram);
+    const casePattern = inferCasePatternFromDisorderName(details.diseaseName);
+    details.artConfig = buildArtConfig(preset.targets, tympanogram, details.diseaseName || null, casePattern);
+    details.dpoaeConfig = buildDPOAEConfig(preset.targets, tympanogram);
   }
 });
 

@@ -81,11 +81,17 @@ export default function StapedialReflexGif({
       return 999; // 反射消失
     }
     
-    // 刺激側が伝音障害（B型）なら反射消失
-    // ただし、AOM症例などで正常側のCONT反射はoverrideで上昇させているため、
-    // overrideが設定されていれば上記で既に返されている
+    // 刺激側が伝音障害（B型）の場合
+    // 測定側が正常で対側刺激のCONT反射は、閾値上昇するが反応あり
     if (stimulusConfig.tympanogramType === 'B') {
-      return 999; // 反射消失
+      if (measuredConfig.tympanogramType !== 'B' && !isIpsi) {
+        const acLoss = stimulusConfig.acThresholds?.[freq];
+        const acBasedElev = (typeof acLoss === 'number' && acLoss > 10)
+          ? Math.min(35, Math.round(acLoss * 0.2))
+          : 15;
+        return normalThresh + acBasedElev;
+      }
+      return 999; // 同側刺激・測定側伝音障害は反射消失
     }
     
     // BC値（感音成分）を参照して反射閾値を計算
