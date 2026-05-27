@@ -4193,8 +4193,8 @@ ${episodeHint ? `
     const p2 = { ...p, masked: p.masked };
     const max = maxPresentable(p2.transducer, p2.freq);
     const atMax = p2.dB >= max;
-    const heardAtMax = hearsAtLevel(p2.ear, p2.transducer, p2.freq, max);
-    const so = atMax && !heardAtMax;
+    const testEarHeardAtMax = max >= getActualThreshold(p2.ear, p2.transducer, p2.freq, p2.masked, p2.masked ? maskLevel : -15);
+    const so = atMax && !testEarHeardAtMax;
     const p3 = { ...p2, dB: atMax ? max : p2.dB, ...(so ? { so: true } : {}) };
 
     setPoints(prev => {
@@ -4261,8 +4261,8 @@ ${episodeHint ? `
 
     const max = maxPresentable(trans, freq);
     const atMax = dBclamped >= max;
-    const heardAtMax = hearsAtLevel(ear, trans, freq, max);
-    const so = atMax && !heardAtMax;
+    const testEarHeardAtMax = max >= getActualThreshold(ear, trans, freq, masked, masked ? maskLevel : -15);
+    const so = atMax && !testEarHeardAtMax;
 
     const p = { ear, transducer: trans, masked, freq, dB: atMax ? max : dBclamped, ...(so ? { so: true } : {}) };
     // チャートクリックはレベル位置の調整のみ（閾値プロットは「閾値決定」ボタンで行う）
@@ -4419,11 +4419,28 @@ ${episodeHint ? `
     }
     return Infinity; // missing → treat as no response
   }
+  function getActualThreshold(earKey, transKey, f, isMasked, mLevel) {
+    const useMasked = isMasked !== undefined ? isMasked : masked;
+    const useMaskLevel = mLevel !== undefined ? mLevel : maskLevel;
+    const teThr = getThr(earKey, transKey, f);
+
+    // オーバーマスキングの計算
+    let actualThreshold = teThr;
+    if (useMasked) {
+      // マスキングの上限 = 測定耳BC閾値 + 50dB
+      const testEarBC = getThr(earKey, 'BC', f);
+      const maskingLimit = testEarBC + 50;
+      if (useMaskLevel > maskingLimit) {
+        const overMasking = useMaskLevel - maskingLimit;
+        actualThreshold = teThr + overMasking;
+      }
+    }
+    return actualThreshold;
+  }
   function hearsAtLevel(earKey, transKey, f, L, isMasked, mLevel) {
     const useMasked = isMasked !== undefined ? isMasked : masked;
     const useMaskLevel = mLevel !== undefined ? mLevel : maskLevel;
     
-    const teThr = getThr(earKey, transKey, f);
     const nte = earKey === 'R' ? 'L' : 'R';
     const ia = icSettings[f]?.[transKey] ?? (transKey === 'AC' ? 50 : 0);
     const leakedToNTE = L - ia;
@@ -4442,20 +4459,7 @@ ${episodeHint ? `
     
     const crossHeard = leakedToNTE >= effectiveMask;
     
-    // オーバーマスキングの計算
-    let actualThreshold = teThr;
-    if (useMasked) {
-      // AC/BC測定時のオーバーマスキング計算
-      // マスキングの上限 = 測定耳BC閾値 + 50dB
-      const testEarBC = getThr(earKey, 'BC', f);
-      const maskingLimit = testEarBC + 50;
-      
-      if (useMaskLevel > maskingLimit) {
-        // オーバーマスキング発生
-        const overMasking = useMaskLevel - maskingLimit;
-        actualThreshold = teThr + overMasking;
-      }
-    }
+    const actualThreshold = getActualThreshold(earKey, transKey, f, useMasked, useMaskLevel);
     
     // 実際の閾値（オーバーマスキング考慮後）で判定
     const testEarHeard = L >= actualThreshold;
