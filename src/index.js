@@ -4,6 +4,7 @@ import AudiogramMaskingMVP from './AudiogramMaskingMVP';
 import TympanogramViewer from './TympanogramViewer';
 import EpidemiologyViewer from './EpidemiologyViewer';
 import InstructorApp from './InstructorApp';
+import EyeMovementSimulator from './EyeMovementSimulator';
 
 // URLパラメータで表示するコンポーネントを切り替え
 const urlParams = new URLSearchParams(window.location.search);
@@ -22,6 +23,12 @@ if (view === 'tympanogram') {
   root.render(
     <React.StrictMode>
       <EpidemiologyViewer />
+    </React.StrictMode>
+  );
+} else if (view === 'eye-movement' || mode === 'eye-movement') {
+  root.render(
+    <React.StrictMode>
+      <EyeMovementSimulator />
     </React.StrictMode>
   );
 } else if (mode === 'instructor') {

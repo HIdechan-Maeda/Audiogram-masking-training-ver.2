@@ -4984,6 +4984,14 @@ ${targets.map((target, index) => {
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => {
+                window.location.href = '/?view=eye-movement';
+              }}
+              className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            >
+              眼球運動シミュレータ
+            </button>
+            <button
+              onClick={() => {
                 window.location.href = '/?view=tympanogram';
               }}
               className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
