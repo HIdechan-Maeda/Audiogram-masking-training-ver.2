@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import CameraPipOverlay, { DEFAULT_PIP_LAYOUT } from './CameraPipOverlay';
+import CameraPipOverlay, { computeBottomRightLayout, DEFAULT_PIP_LAYOUT } from './CameraPipOverlay';
 import RecordingPreviewModal from './RecordingPreviewModal';
 import {
   attachCameraToVideo,
@@ -54,7 +54,8 @@ const OKN_DEG_MIN = 2;
 const OKN_DEG_MAX = 60;
 const PURSUIT_AMP_DEG_MIN = 5;
 const PURSUIT_AMP_DEG_MAX = 15;
-const PURSUIT_AMP_DEG_DEFAULT = 10;
+const PURSUIT_AMP_DEG_DEFAULT = 15;
+const PURSUIT_HZ_DEFAULT = 0.25;
 const GAZE_ECCENTRIC_DEG_DEFAULT = 15;
 const GAZE_HOLD_SEC = 10;
 const GAZE_CENTER_HOLD_SEC = 5;
@@ -604,7 +605,7 @@ export default function EyeMovementSimulator() {
     viewDistanceCm: DEFAULT_VIEW_DISTANCE_CM,
     screenWidthCm: DEFAULT_SCREEN_WIDTH_CM,
     pursuitAmpDeg: PURSUIT_AMP_DEG_DEFAULT,
-    pursuitHz: 0.35,
+    pursuitHz: PURSUIT_HZ_DEFAULT,
     pursuitLag: 0.08,
     saccadeTargets: [-0.75, 0, 0.75, 0],
     saccadeIndex: 0,
@@ -625,7 +626,7 @@ export default function EyeMovementSimulator() {
   const [viewDistanceCm, setViewDistanceCm] = useState(DEFAULT_VIEW_DISTANCE_CM);
   const [screenWidthCm, setScreenWidthCm] = useState(DEFAULT_SCREEN_WIDTH_CM);
   const [oknDir, setOknDir] = useState(1);
-  const [pursuitHz, setPursuitHz] = useState(0.35);
+  const [pursuitHz, setPursuitHz] = useState(PURSUIT_HZ_DEFAULT);
   const [pursuitAmpDeg, setPursuitAmpDeg] = useState(PURSUIT_AMP_DEG_DEFAULT);
   const [gazeEccentricDeg, setGazeEccentricDeg] = useState(GAZE_ECCENTRIC_DEG_DEFAULT);
   const [gazePathology, setGazePathology] = useState(false);
@@ -734,6 +735,19 @@ export default function EyeMovementSimulator() {
       cancelled = true;
     };
   }, [cameraOn]);
+
+  useEffect(() => {
+    if (!cameraOn) return undefined;
+    const placeBottomRight = () => {
+      const stage = stageRef.current;
+      if (!stage) return;
+      const next = computeBottomRightLayout(stage.clientWidth, stage.clientHeight, pipLayoutRef.current.size);
+      handlePipLayoutChange(next);
+    };
+    placeBottomRight();
+    window.addEventListener('resize', placeBottomRight);
+    return () => window.removeEventListener('resize', placeBottomRight);
+  }, [cameraOn, handlePipLayoutChange, isFullscreen]);
 
   const disableCamera = useCallback(async () => {
     const session = recordingSessionRef.current;

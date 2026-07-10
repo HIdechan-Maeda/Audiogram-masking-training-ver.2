@@ -150,4 +150,26 @@ export default function CameraPipOverlay({
   );
 }
 
-export const DEFAULT_PIP_LAYOUT = { x: 0.46, y: 0.05, size: 0.52 };
+const MARGIN = 0.02;
+
+/** ステージ右下に PiP を配置するレイアウトを算出 */
+export function computeBottomRightLayout(stageW, stageH, size = 0.52) {
+  const s = clamp(size, MIN_SIZE, MAX_SIZE);
+  if (stageW <= 0 || stageH <= 0) {
+    return { x: 1 - s - MARGIN, y: 0.95, size: s };
+  }
+  const pipW = stageW * s;
+  const pipH = pipW * ASPECT;
+  const totalH = pipH + PIP_HEADER_PX;
+  const maxLeft = Math.max(0, stageW - pipW);
+  const maxTop = Math.max(0, stageH - totalH);
+  const left = clamp(stageW * (1 - s - MARGIN), 0, maxLeft);
+  const top = clamp(maxTop - stageH * MARGIN, 0, maxTop);
+  return {
+    x: left / stageW,
+    y: top / stageH,
+    size: s,
+  };
+}
+
+export const DEFAULT_PIP_LAYOUT = computeBottomRightLayout(820, 420, 0.52);
