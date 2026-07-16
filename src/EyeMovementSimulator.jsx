@@ -46,7 +46,8 @@ const MODE_INFO = {
 };
 
 const DEFAULT_W = 820;
-const DEFAULT_H = 360;
+/** 目玉シミュ非表示のため、刺激用ステージ縦をやや大きく */
+const DEFAULT_H = 520;
 
 const DEFAULT_VIEW_DISTANCE_CM = 50;
 const DEFAULT_SCREEN_WIDTH_CM = 34;
@@ -121,15 +122,15 @@ function getDegPerPixelVertical(stageHeightPx, viewDistanceCm, screenHeightCm) {
   return (cmPerPx / viewDistanceCm) * (180 / Math.PI);
 }
 
-/** Gaze用: 上部バー・操作パネル・眼球表示を除いた注視可能領域 */
+/** Gaze用: 上部バー・操作パネルを除いた注視可能領域（目玉描画帯は使わない） */
 function getGazeViewport(layout, isFullscreen, panelOpen) {
   const { w, h } = layout;
   const topMargin = isFullscreen ? 96 : 44;
   const bottomMargin = panelOpen
-    ? Math.min(h * 0.28, 260)
+    ? Math.min(h * 0.22, 220)
     : isFullscreen
-      ? 64
-      : Math.min(h * 0.28, 120);
+      ? 56
+      : Math.min(h * 0.12, 72);
   const usableH = Math.max(140, h - topMargin - bottomMargin);
   const maxOffsetX = w / 2 - 48;
   const maxOffsetY = usableH / 2 - 20;
@@ -229,10 +230,11 @@ function makeLayout(w, h) {
   return {
     w,
     h,
-    eyeY: h * 0.62,
+    // 画面上の目玉シミュは非表示。刺激領域をほぼ全面に使う
+    eyeY: h * 0.5,
     eyeRadius: clamp(w * 0.044, 26, 52),
-    stimH: h * 0.48,
-    targetY: h * 0.22,
+    stimH: h,
+    targetY: h * 0.5,
   };
 }
 
@@ -1084,7 +1086,8 @@ export default function EyeMovementSimulator() {
         s.mode === MODES.GAZE && gazeViewport
           ? s.eyeNormY * gazeViewport.maxOffsetY * 0.55
           : s.eyeNormY * layout.stimH * 0.28;
-      drawEye(ctx, normToPx(s.eyeNorm, layout), layout, '', eyeYPx);
+      // 教育用の「目玉」描画は出さない（実眼球はカメラで観察。刺激の縦スペースを優先）
+      void eyeYPx;
 
       ctx.fillStyle = isFullscreen ? '#94a3b8' : '#64748b';
       ctx.font = `${Math.max(11, w * 0.014)}px system-ui, sans-serif`;
@@ -1214,7 +1217,7 @@ export default function EyeMovementSimulator() {
           className={
             isFullscreen
               ? 'fixed inset-0 z-50 bg-slate-900'
-              : 'relative bg-slate-900 rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-4 h-[360px] md:h-[420px]'
+              : 'relative bg-slate-900 rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-4 h-[min(70vh,640px)] md:h-[min(72vh,700px)]'
           }
         >
           <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
@@ -1309,7 +1312,7 @@ export default function EyeMovementSimulator() {
                     <p className="text-xs font-medium text-gray-700 mb-1">動画録画（カメラのみ）</p>
                     <p className="text-xs text-gray-500 leading-relaxed">
                       録画されるのは<strong>カメラ映像のみ</strong>です（PC画面は含みません）。ライブ確認用の枠は
-                      <strong>ドラッグで移動</strong>、右下で<strong>拡大・縮小</strong>できます。眼球の動きが見えるよう大きめに表示してください。
+                      <strong>ドラッグで移動</strong>、右下で<strong>拡大・縮小</strong>できます。画面は刺激のみ表示し、実眼球はカメラ枠で確認してください。
                     </p>
                   </div>
                   {isFullscreen && (
@@ -1331,28 +1334,31 @@ export default function EyeMovementSimulator() {
               <li>録画はカメラ映像のみ（フル解像度）。ライブ枠は拡大して眼球運動を確認してください</li>
                 {mode === MODES.OKN && (
                   <>
-                    <li>上段：視運動刺激（ストライプパターン）</li>
+                    <li>画面全体：視運動刺激（ストライプパターン）</li>
                     <li>速度は視角速度（°/s）で調整（視距離50cm・画面幅約34cm想定）</li>
-                    <li>下段：眼球の徐波相・速波相を模した水平運動</li>
+                    <li>被験者の実眼球はカメラ映像で観察（画面上の目玉シミュは非表示）</li>
                   </>
                 )}
               {mode === MODES.PURSUIT && (
                 <>
-                  <li>赤い標的が正弦波（sin）で左右に動き、眼球がなめらかに追従します</li>
+                  <li>赤い標的が正弦波（sin）で左右に動き、被験者が滑らかに追従します</li>
                   <li>振幅は視角（±5°・10°・15°）で調整（最大±15°・フルスクリーン推奨）</li>
                   <li>破線は標的の sin 軌道の目安です</li>
-                  <li>追従の遅れは滑動性追跡の特性を簡略化して表現しています</li>
+                  <li>実眼球はカメラで観察（画面上の目玉シミュは非表示）</li>
                 </>
               )}
               {mode === MODES.SACCADE && (
-                <li>標的位置へ跳躍的に眼球が移動します（潜伏期は省略）</li>
+                <>
+                  <li>標的が跳躍します。被験者の実眼球はカメラで観察してください</li>
+                  <li>画面上の目玉シミュは非表示です（刺激の縦スペースを優先）</li>
+                </>
               )}
               {mode === MODES.GAZE && (
                 <>
                   <li>緑の十字が右→正中→左→正中→上→正中→下→正中の順に自動で跳躍します</li>
                   <li>偏心位置で10秒、正中に戻ったときは5秒静止します</li>
                   <li>偏心角度は視距離50cm想定で最大±15°（フルスクリーン推奨）</li>
-                  <li>病態モード ON で偏心注視時の眼振様運動を表示します</li>
+                  <li>実眼球はカメラで観察（画面上の目玉シミュは非表示・上下可動域を拡大）</li>
                 </>
               )}
             </ul>
