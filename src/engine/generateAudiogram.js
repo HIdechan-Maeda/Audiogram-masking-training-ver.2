@@ -167,7 +167,130 @@ function correlateLeft(rand, rightRows, sex, age) {
 }
 
 // プロファイル変換の簡略版（まずは Normal と同時生成/片耳病型の枠を実装）
-function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands, ageForBands) {
+/** 耳硬化 Carhart様の発現確率（severity≥1のとき）。臨床でも全例に明瞭でないことを踏まえた教育用仕様。 */
+export const CARHART_EXPRESSION_PROB = 0.8;
+/** 検証・仕様上の Carhart様定義: BC2k − mean(BC1k, BC4k) ≥ 5 dB かつ BC2k が隣接両側より悪い */
+export const CARHART_MIN_DEPTH_DB = 5;
+
+/**
+ * 突発性難聴のスケールアウト（教育用・ムンプスと役割分担）
+ * - ムンプス: 約50%で患側の全周波数 SO（高度一側を明示）
+ * - 突発: 程度2で高音SO、程度3で高音SOまたはまれに全周SO（測定可能な帯域を残しつつNRも提示）
+ */
+export const SUDDEN_SO_FULL_PROB = 0.12; // severity≥3
+export const SUDDEN_SO_HF_PROB_SEV2 = 0.20;
+export const SUDDEN_SO_HF_PROB_SEV3 = 0.35; // full の残り確率帯（roll が FULL〜FULL+HF）
+
+function forceScaleOutRow(r, { withBc = true } = {}) {
+  const acMax = LIMITS_AC[r.freq].max;
+  let bc = r.bc;
+  let soBC = Boolean(r.soBC);
+  if (withBc && isBCFreq(r.freq)) {
+    const th = TH_SNHL_BC_NR[r.freq];
+    if (typeof th === 'number') {
+      bc = roundTo5(th);
+      soBC = true;
+    }
+  }
+  return { ...r, ac: roundTo5(acMax), soAC: true, bc, soBC };
+}
+
+/** @returns {{ mode: 'none'|'hf'|'full', include2k: boolean }} */
+function decideSuddenSoMode(rand, severity) {
+  // 程度によらず2回消費し、同一seedで程度だけ変えたときのRNG位相を揃える
+  const roll = rand();
+  const roll2 = rand();
+  let mode = 'none';
+  const sev = Math.min(3, Math.max(0, Math.round(severity || 0)));
+  if (sev >= 3 && roll < SUDDEN_SO_FULL_PROB) {
+    mode = 'full';
+  } else if (sev >= 2) {
+    const hfCut = sev >= 3
+      ? SUDDEN_SO_FULL_PROB + SUDDEN_SO_HF_PROB_SEV3
+      : SUDDEN_SO_HF_PROB_SEV2;
+    if (roll < hfCut) mode = 'hf';
+  }
+  const include2k = mode === 'hf' && sev >= 3 && roll2 < 0.5;
+  return { mode, include2k };
+}
+
+function applySuddenScaleOut(rows, mode, include2k) {
+  if (!mode || mode === 'none') return rows;
+  if (mode === 'full') {
+    return rows.map((r) => forceScaleOutRow(r, { withBc: true }));
+  }
+  // hf: 8 kHz・4 kHz を SO。程度3では半数で 2 kHz も SO。
+  return rows.map((r) => {
+    if (r.freq === '8kHz') return forceScaleOutRow(r, { withBc: false });
+    if (r.freq === '4kHz') return forceScaleOutRow(r, { withBc: true });
+    if (r.freq === '2kHz' && include2k) return forceScaleOutRow(r, { withBc: true });
+    return r;
+  });
+}
+
+function enforceNoiseNotchGeometry(rows) {
+  const by = Object.fromEntries(rows.map((r) => [r.freq, r]));
+  const r2 = by['2kHz'];
+  const r4 = by['4kHz'];
+  if (!r2 || !r4 || typeof r2.ac !== 'number' || typeof r4.ac !== 'number') return rows;
+  if (r4.ac > r2.ac) return rows;
+  const lim = LIMITS_AC['4kHz'];
+  const target = roundTo5(clamp(r2.ac + 5, lim.min, lim.max));
+  return rows.map((r) => {
+    if (r.freq !== '4kHz') return r;
+    const ac = Math.max(r.ac, target);
+    let bc = r.bc;
+    if (typeof bc === 'number') {
+      const limB = LIMITS_BC['4kHz'];
+      bc = roundTo5(clamp(Math.min(bc, ac + 5), limB.min, limB.max));
+    }
+    return { ...r, ac, bc };
+  });
+}
+
+function enforceCarhartNotchGeometry(rows) {
+  const by = Object.fromEntries(rows.map((r) => [r.freq, r]));
+  const r1 = by['1kHz'];
+  const r2 = by['2kHz'];
+  const r4 = by['4kHz'];
+  if (!r1 || !r2 || !r4) return rows;
+  if (typeof r1.bc !== 'number' || typeof r2.bc !== 'number' || typeof r4.bc !== 'number') return rows;
+
+  const lim2 = LIMITS_BC['2kHz'];
+  const limAc2 = LIMITS_AC['2kHz'];
+  // 隣接より悪い + mean より ≥5 dB
+  let desiredBc = Math.max(r1.bc, r4.bc) + CARHART_MIN_DEPTH_DB;
+  const meanAdj = (r1.bc + r4.bc) / 2;
+  desiredBc = Math.max(desiredBc, meanAdj + CARHART_MIN_DEPTH_DB);
+  desiredBc = Math.ceil(desiredBc / 5) * 5;
+  while (desiredBc <= r1.bc || desiredBc <= r4.bc) desiredBc += 5;
+
+  // 2 kHz 最小ABG=5 を満たすよう AC を先に確保し、その上で BC を置く
+  const minAbg2 = 5;
+  let ac2 = typeof r2.ac === 'number' ? r2.ac : limAc2.min;
+  ac2 = roundTo5(clamp(Math.max(ac2, desiredBc + minAbg2), limAc2.min, limAc2.max));
+  const bc2 = roundTo5(clamp(Math.min(desiredBc, ac2 + 5), lim2.min, lim2.max));
+
+  // もし AC 上限で BC が足りない場合は隣接 BC を下げて幾何を確保（教育用拘束）
+  let bc1 = r1.bc;
+  let bc4 = r4.bc;
+  if (!(bc2 > bc1 && bc2 > bc4 && bc2 - (bc1 + bc4) / 2 >= CARHART_MIN_DEPTH_DB - 1e-9)) {
+    const lim1 = LIMITS_BC['1kHz'];
+    const lim4 = LIMITS_BC['4kHz'];
+    bc1 = roundTo5(clamp(Math.min(bc1, bc2 - CARHART_MIN_DEPTH_DB), lim1.min, lim1.max));
+    bc4 = roundTo5(clamp(Math.min(bc4, bc2 - CARHART_MIN_DEPTH_DB), lim4.min, lim4.max));
+  }
+
+  return rows.map((r) => {
+    if (r.freq === '2kHz') return { ...r, ac: ac2, bc: bc2 };
+    if (r.freq === '1kHz' && typeof r.bc === 'number') return { ...r, bc: bc1 };
+    if (r.freq === '4kHz' && typeof r.bc === 'number') return { ...r, bc: bc4 };
+    return r;
+  });
+}
+
+function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands, ageForBands, options = {}) {
+  const { carhartApplied = false } = options;
   // まずは現状：ACにseverity応じたバイアスを加える軽量版
   const out = rows.map((r, idx, arr) => {
     let add = 0;
@@ -219,8 +342,8 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
         const lim = LIMITS_BC[r.freq];
         const band = getBand(sexForBands, ageForBands, r.freq);
         let bcRaw = (band.median ?? 0) + (rand() - 0.5) * 12.0; // ±6dB程度
-        // 耳硬化症: Carhartノッチ（2k中心、1k/4kに弱く波及）
-        if (profile === 'CHL_Otosclerosis') {
+        // 耳硬化症: Carhart様（発現が選ばれた場合のみ。2k中心、幾何拘束は後段で保証）
+        if (profile === 'CHL_Otosclerosis' && carhartApplied) {
           const wBC = { "1kHz": 0.3, "2kHz": 1.0, "4kHz": 0.2 }[r.freq] || 0;
           const carhart = [0, 6, 10, 15][Math.min(3, Math.max(0, Math.round(severity||0)))];
           bcRaw += wBC * carhart;
@@ -316,26 +439,39 @@ export function generateAudiogram(opts = {}) {
   
   // ステップ2: プロファイルと重症度を決定
   const profile = opts.profile || randomPick(rand, PROFILES);
+  const severityWasRandom = opts.severity == null;
   let severity = opts.severity != null ? opts.severity : Math.floor(rand() * 4);
 
   // 一側性のSNHL系は重症度0（なし）を避けて最低1に補正（表示上の無変化を防止）
+  // ※明示指定時は補正しない（検証・教員用の条件固定を優先）
   const unilateralProfiles = new Set(['SNHL_Sudden', 'SNHL_Meniere', 'SNHL_Mumps', 'CHL_OssicularDiscontinuity']);
   const forcedUnilateralAOM = profile === 'CHL_AOM' && rand() < 0.8;
   const isUnilateralProfile = unilateralProfiles.has(profile) || forcedUnilateralAOM;
 
-  if (isUnilateralProfile && profile.startsWith('SNHL_') && severity === 0) {
+  if (severityWasRandom && isUnilateralProfile && profile.startsWith('SNHL_') && severity === 0) {
     severity = 1;
   }
 
   // ステップ3: 性別と年齢グループからISO7029データを参照してオージオグラムのベースを生成
   // これが最初のオージオグラム作成ステップ（年代・性別からISOデータを見て作成）
   let right = generateEarBase(rand, sex, ageGroup);
+
+  // 耳硬化: Carhart様の発現を事前定義確率で決定（severity≥1）
+  // ※severity=0でも乱数を1回消費し、同一seedで程度だけ変えたときのRNG位相を揃える
+  let carhartApplied = false;
+  if (profile === 'CHL_Otosclerosis') {
+    const roll = rand();
+    carhartApplied = severity >= 1 && roll < CARHART_EXPRESSION_PROB;
+  }
+  const profileOpts = { carhartApplied };
   
   // ステップ4: プロファイル（疾患パターン）を適用して難聴パターンを追加
-  right = applyProfileTransform(rand, right, profile, severity, seed, sex, ageGroup);
+  right = applyProfileTransform(rand, right, profile, severity, seed, sex, ageGroup, profileOpts);
 
   let left;
   let affectedSide = null;
+  let suddenSoMode = 'none';
+  let suddenSoInclude2k = false;
 
   if (isUnilateralProfile) {
     const affectedRight = opts.affectedSide ? (opts.affectedSide === 'R') : (rand() < 0.5);
@@ -343,38 +479,33 @@ export function generateAudiogram(opts = {}) {
     if (affectedRight) {
       // 左はNormal（同sex/age）
       left = makeContralateralNormal(rand, sex, ageGroup);
-      // Mumpsのとき、50%で患側（右）をAC/BCとも強制NR
-      if (profile === 'SNHL_Mumps' && rand() < 0.5) {
-        right = right.map(r => {
-          const acMax = LIMITS_AC[r.freq].max;
-          let bc = r.bc;
-          let soBC = r.soBC;
-          if (isBCFreq(r.freq)) {
-            const th = TH_SNHL_BC_NR[r.freq];
-            if (typeof th === 'number') { bc = roundTo5(th); soBC = true; }
-          }
-          return { ...r, ac: roundTo5(acMax), soAC: true, bc, soBC };
-        });
-      }
     } else {
       // 右をNormalにし、左を病側生成
       const normalRight = makeContralateralNormal(rand, sex, ageGroup);
       let diseasedLeft = generateEarBase(rand, sex, ageGroup);
-      diseasedLeft = applyProfileTransform(rand, diseasedLeft, profile, severity, seed, sex, ageGroup);
+      diseasedLeft = applyProfileTransform(rand, diseasedLeft, profile, severity, seed, sex, ageGroup, profileOpts);
       right = normalRight;
       left = diseasedLeft;
-      // Mumpsのとき、50%で患側（左）をAC/BCとも強制NR
-      if (profile === 'SNHL_Mumps' && rand() < 0.5) {
-        left = left.map(r => {
-          const acMax = LIMITS_AC[r.freq].max;
-          let bc = r.bc;
-          let soBC = r.soBC;
-          if (isBCFreq(r.freq)) {
-            const th = TH_SNHL_BC_NR[r.freq];
-            if (typeof th === 'number') { bc = roundTo5(th); soBC = true; }
-          }
-          return { ...r, ac: roundTo5(acMax), soAC: true, bc, soBC };
-        });
+    }
+
+    // 突発: 高音SO／まれに全周SO（ムンプスの高率全周SOと役割分担）
+    if (profile === 'SNHL_Sudden') {
+      const decided = decideSuddenSoMode(rand, severity);
+      suddenSoMode = decided.mode;
+      suddenSoInclude2k = decided.include2k;
+      if (affectedRight) {
+        right = applySuddenScaleOut(right, suddenSoMode, suddenSoInclude2k);
+      } else {
+        left = applySuddenScaleOut(left, suddenSoMode, suddenSoInclude2k);
+      }
+    }
+
+    // ムンプス: 約50%で患側をAC/BCとも強制NR（全周波数）
+    if (profile === 'SNHL_Mumps' && rand() < 0.5) {
+      if (affectedRight) {
+        right = right.map((r) => forceScaleOutRow(r, { withBc: true }));
+      } else {
+        left = left.map((r) => forceScaleOutRow(r, { withBc: true }));
       }
     }
   } else {
@@ -390,6 +521,32 @@ export function generateAudiogram(opts = {}) {
 
   right = enforceBcRules(right, baseRightProfile);
   left = enforceBcRules(left, baseLeftProfile);
+
+  // Carhart様幾何はゆらぎ後に再拘束（発現指定時のみ）
+  if (carhartApplied) {
+    if (baseRightProfile === 'CHL_Otosclerosis') {
+      right = enforceCarhartNotchGeometry(right);
+      right = enforceMinAbg(right, baseRightProfile);
+      right = enforceBcRules(right, baseRightProfile);
+      right = enforceCarhartNotchGeometry(right);
+      right = enforceMinAbg(right, baseRightProfile);
+    }
+    if (baseLeftProfile === 'CHL_Otosclerosis') {
+      left = enforceCarhartNotchGeometry(left);
+      left = enforceMinAbg(left, baseLeftProfile);
+      left = enforceBcRules(left, baseLeftProfile);
+      left = enforceCarhartNotchGeometry(left);
+      left = enforceMinAbg(left, baseLeftProfile);
+    }
+  }
+
+  // 騒音切痕: severity≥1 では 4 kHz AC > 2 kHz AC を保証
+  if (profile === 'SNHL_NoiseNotch' && severity >= 1) {
+    if (baseRightProfile === 'SNHL_NoiseNotch') right = enforceNoiseNotchGeometry(right);
+    if (baseLeftProfile === 'SNHL_NoiseNotch') left = enforceNoiseNotchGeometry(left);
+    right = enforceBcRules(right, baseRightProfile);
+    left = enforceBcRules(left, baseLeftProfile);
+  }
 
   // 最終: soAC判定（ACが機器上限超ならNR）
   const finalizeSo = (rows) => rows.map(r => {
@@ -449,7 +606,11 @@ export function generateAudiogram(opts = {}) {
   }
 
   return {
-    meta: { seed, sex, ageGroup, profile, severity, affectedSide, rightProfile, leftProfile, forcedUnilateralAOM },
+    meta: {
+      seed, sex, ageGroup, profile, severity, affectedSide,
+      rightProfile, leftProfile, forcedUnilateralAOM, carhartApplied,
+      suddenSoMode, suddenSoInclude2k,
+    },
     right,
     left,
   };
@@ -469,6 +630,27 @@ function applyBcRandomJitter(rand, rows, options = {}) {
 }
 
 const CONDUCTIVE_PROFILES = new Set(['CHL_OME','CHL_AOM','CHL_Otosclerosis','CHL_OssicularDiscontinuity']);
+
+function enforceMinAbg(rows, earProfile) {
+  const minMaps = {
+    CHL_OME: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 8 },
+    CHL_AOM: { "0.25kHz": 15, "0.5kHz": 20, "1kHz": 15, "2kHz": 10, "4kHz": 5 },
+    CHL_Otosclerosis: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 5 },
+    CHL_OssicularDiscontinuity: { "0.25kHz": 20, "0.5kHz": 25, "1kHz": 25, "2kHz": 20, "4kHz": 15, "8kHz": 10 },
+  };
+  const map = minMaps[earProfile];
+  if (!map) return rows;
+  return rows.map((r) => {
+    if (!isBCFreq(r.freq) || typeof r.bc !== 'number' || typeof r.ac !== 'number') return r;
+    const minABG = map[r.freq] || 0;
+    if (minABG <= 0) return r;
+    const gap = r.ac - r.bc;
+    if (gap >= minABG) return r;
+    const lim = LIMITS_AC[r.freq];
+    const ac = roundTo5(clamp(r.bc + minABG, lim.min, lim.max));
+    return { ...r, ac };
+  });
+}
 
 function enforceBcRules(rows, earProfile) {
   const isConductive = CONDUCTIVE_PROFILES.has(earProfile);
