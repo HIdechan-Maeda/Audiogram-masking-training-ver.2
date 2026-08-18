@@ -394,10 +394,10 @@ export default function ISO7029CanvasDemo() {
         return r;
       });
     } else if (profile === "CHL_AOM" && severity > 0) {
-      // AOM: 低音でより強いABG
+      // AOM: 伝音成分は低〜中音中心。最小ABG床はOMEと同一（大小関係は固定しない）
       const depth = [0, 15, 25, 35][Math.min(3, Math.max(0, Math.round(severity)))];
       const wAC = { "0.125kHz": 0.7, "0.25kHz": 1.0, "0.5kHz": 1.0, "1kHz": 0.8, "2kHz": 0.4, "4kHz": 0.2, "8kHz": 0.1 };
-      const minABG = { "0.25kHz": 15, "0.5kHz": 20, "1kHz": 15, "2kHz": 10, "4kHz": 5 };
+      const minABG = { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 8 };
       // BC ~ 正常
       const bcNorm = withOutliers.map((r) => {
         let sampleBC = r.sampleBC ?? null;

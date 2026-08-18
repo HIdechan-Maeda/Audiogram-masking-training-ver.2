@@ -14,6 +14,7 @@ import {
   checkSnhlBcCap,
   checkNoiseNotch,
   hasCarhartGeometry,
+  checkAomMixed,
   checkNormalAbgNotExcessive,
   diseasedEar,
   meanAC,
@@ -22,6 +23,8 @@ import {
   BC_FREQS,
   CARHART_RATE_LO,
   CARHART_RATE_HI,
+  AOM_MIXED_RATE_LO,
+  AOM_MIXED_RATE_HI,
 } from './lib/audiogramRuleChecks.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -47,6 +50,7 @@ const ISO_DATA = JSON.parse(readFileSync(join(__dirname, "../../src/data/iso7029
 const {
   generateAudiogram,
   CARHART_EXPRESSION_PROB,
+  AOM_MIXED_PROB,
   EngineConstants,
 } = await import(pathToFileURL(cacheEngine).href + '?t=' + Date.now());
 
@@ -124,6 +128,9 @@ const counters = {
   noiseOk: 0,
   carhartExprN: 0,
   carhartGeomOk: 0,
+  aomSevN: 0,
+  aomMixedN: 0,
+  aomMixedOk: 0,
   abgVals: [],
   noiseDepths: [],
   carhartDepths: [],
@@ -174,7 +181,7 @@ for (const profile of PROFILES) {
           }
           if (profile.startsWith('SNHL_')) {
             counters.snhlN += 1;
-            if (checkSnhlBcCap(c)) counters.snhlOk += 1;
+            if (checkSnhlBcCap(c, profile)) counters.snhlOk += 1;
           }
           if (profile.startsWith('CHL_')) {
             counters.chlN += 1;
@@ -184,6 +191,13 @@ for (const profile of PROFILES) {
               if (!BC_FREQS.has(r.freq)) continue;
               const g = abg(r);
               if (g != null) counters.abgVals.push(g);
+            }
+          }
+          if (profile === 'CHL_AOM' && severity >= 1) {
+            counters.aomSevN += 1;
+            if (c.meta.aomMixedApplied) {
+              counters.aomMixedN += 1;
+              if (checkAomMixed(c)) counters.aomMixedOk += 1;
             }
           }
           if (profile === 'SNHL_NoiseNotch' && severity >= 1) {
@@ -252,8 +266,9 @@ add('G2b', '5 dB丸め（閾値点単位）', counters.roundPointOk, counters.ro
 add('G3-Normal', 'Normal: 過大ABGなし（症例単位）', counters.normalOk, counters.normalN);
 add('G3-SNHL', '感音: BC≤AC+5（症例単位）', counters.snhlOk, counters.snhlN);
 add('G3-CHL', '伝音: 最小ABG（症例単位）', counters.chlOk, counters.chlN);
-add('G3-Noise', '騒音切痕: 4k>2k（程度≥1）', counters.noiseOk, counters.noiseN);
+add('G3-Noise', 'C5-dip: 4k>2k かつ 4k>8k（程度≥1）', counters.noiseOk, counters.noiseN);
 add('G3-CarhartGeom', 'Carhart様幾何（発現例のみ）', counters.carhartGeomOk, counters.carhartExprN);
+add('G3-AOM-Mixed', 'AOM混合型: 4k BC>0.5k BC（付与例）', counters.aomMixedOk, counters.aomMixedN);
 
 // ---------- 焦点・記述統計 ----------
 {
@@ -274,8 +289,10 @@ add('G3-CarhartGeom', 'Carhart様幾何（発現例のみ）', counters.carhartG
     `差の中央値 ${q.median.toFixed(1)} dB (IQR ${q.q25.toFixed(1)}–${q.q75.toFixed(1)})`);
 }
 
-// 程度の順序性：正常以外。同一seedで severity のみ変える
+// 程度の順序性：正常以外。同一seedで severity のみ変える。
+// 一側性は患側を固定（severity変更で乱数位相がずれ患側が入れ替わるのを防ぐ）
 {
+  const unilateral = new Set(['SNHL_Sudden', 'SNHL_Meniere', 'SNHL_Mumps', 'CHL_OssicularDiscontinuity', 'CHL_AOM']);
   const targets = PROFILES.filter((p) => p !== 'Normal');
   let cells = 0;
   let okCells = 0;
@@ -289,12 +306,19 @@ add('G3-CarhartGeom', 'Carhart様幾何（発現例のみ）', counters.carhartG
           const baseSeed = seedFor(profile, ageGroup, sex, 0, s) + 777;
           const means = [];
           const abgs = [];
+          let sideFlip = false;
+          let lastSide = null;
           for (const severity of SEVERITIES) {
-            const c = generateAudiogram({
-              sex, ageGroup, profile, severity, seed: baseSeed,
-            });
+            const opts = { sex, ageGroup, profile, severity, seed: baseSeed };
+            if (unilateral.has(profile)) opts.affectedSide = 'R';
+            const c = generateAudiogram(opts);
+            const side = c.meta?.affectedSide || null;
+            if (lastSide != null && side != null && side !== lastSide) sideFlip = true;
+            lastSide = side;
             const { diseased } = diseasedEar(c);
-            means.push(meanAC(diseased, ['0.5kHz', '1kHz', '2kHz']));
+            const m = meanAC(diseased, ['0.5kHz', '1kHz', '2kHz']);
+            // 全点SO等で mean が null → 不適合（判定不能を合格にしない）
+            means.push(m);
             if (profile.startsWith('CHL_')) {
               const gs = diseased
                 .filter((r) => ['0.5kHz', '1kHz'].includes(r.freq))
@@ -305,7 +329,8 @@ add('G3-CarhartGeom', 'Carhart様幾何（発現例のみ）', counters.carhartG
           }
           localN += 1;
           cells += 1;
-          let pass = means.every((m) => m != null)
+          let pass = !sideFlip
+            && means.every((m) => m != null)
             && means[0] <= means[1] + 1e-9
             && means[1] <= means[2] + 1e-9
             && means[2] <= means[3] + 1e-9;
@@ -324,7 +349,7 @@ add('G3-CarhartGeom', 'Carhart様幾何（発現例のみ）', counters.carhartG
     }
     notes.push(`${profile}:${localOk}/${localN}`);
   }
-  add('T8', '程度の非減少（正常以外・同一seedでseverityのみ変更）', okCells, cells, notes.join('; '));
+  add('T8', '程度の非減少（正常以外・同一seed・一側は患側固定）', okCells, cells, notes.join('; '));
 }
 
 {
@@ -377,6 +402,37 @@ add('G3-CarhartGeom', 'Carhart様幾何（発現例のみ）', counters.carhartG
 }
 
 {
+  let mixed = 0;
+  const N = FOCUS_N;
+  for (let i = 0; i < N; i++) {
+    const c = generateAudiogram({
+      sex: 'Male', ageGroup: '20s', profile: 'CHL_AOM', severity: 2, seed: 62000 + i, affectedSide: 'R',
+    });
+    if (c.meta.aomMixedApplied) mixed += 1;
+  }
+  const [lo, hi] = wilsonCI(mixed, N);
+  const inBand = mixed / N >= AOM_MIXED_RATE_LO && mixed / N <= AOM_MIXED_RATE_HI;
+  add('T6c', `AOM混合型・教育用付与率${AOM_MIXED_PROB * 100}%（Bernoulli・臨床発生率ではない）`,
+    inBand ? N : mixed, N,
+    `観測 ${mixed}/${N}=${(100 * mixed / N).toFixed(1)}% (95%CI ${(100 * lo).toFixed(1)}–${(100 * hi).toFixed(1)}%)`);
+}
+
+{
+  let n = 0;
+  let ok = 0;
+  for (let i = 0; i < FOCUS_N * 3; i++) {
+    const c = generateAudiogram({
+      sex: 'Male', ageGroup: '20s', profile: 'CHL_AOM', severity: 2, seed: 63000 + i, affectedSide: 'R',
+    });
+    if (!c.meta.aomMixedApplied) continue;
+    n += 1;
+    if (checkAomMixed(c)) ok += 1;
+    if (n >= FOCUS_N) break;
+  }
+  add('T6d', 'AOM混合型・付与時の高音骨導上昇', ok, n);
+}
+
+{
   let ok = 0;
   for (let i = 0; i < FOCUS_N; i++) {
     const seed = 100000 + i;
@@ -386,6 +442,33 @@ add('G3-CarhartGeom', 'Carhart様幾何（発現例のみ）', counters.carhartG
       && JSON.stringify(a.left) === JSON.stringify(b.left)) ok += 1;
   }
   add('T10', 'seed固定の決定論的再現（不一致0を目標）', ok, FOCUS_N, `不一致 ${FOCUS_N - ok}`);
+}
+
+{
+  // T11: 同一条件・異seedの出力多様性（記述統計。全件不一致は要求しない＝5 dB丸め）
+  const conds = [
+    { sex: 'Male', ageGroup: '50s', profile: 'SNHL_NoiseNotch', severity: 2, seed0: 80000 },
+    { sex: 'Female', ageGroup: '40s', profile: 'CHL_OME', severity: 2, seed0: 81000 },
+    { sex: 'Male', ageGroup: '40s', profile: 'Normal', severity: 0, seed0: 82000 },
+  ];
+  const notes = [];
+  for (const cond of conds) {
+    const fps = new Set();
+    let adjDiff = 0;
+    let prev = null;
+    for (let i = 0; i < FOCUS_N; i++) {
+      const c = generateAudiogram({
+        sex: cond.sex, ageGroup: cond.ageGroup, profile: cond.profile,
+        severity: cond.severity, seed: cond.seed0 + i,
+      });
+      const fp = JSON.stringify({ r: c.right, l: c.left });
+      fps.add(fp);
+      if (prev != null && prev !== fp) adjDiff += 1;
+      prev = fp;
+    }
+    notes.push(`${cond.profile}:ユニーク${fps.size}/${FOCUS_N}・隣接不一致${adjDiff}/${FOCUS_N - 1}`);
+  }
+  add('T11', '同一条件・異seedの出力多様性（記述・全件不一致は非要求）', FOCUS_N, FOCUS_N, notes.join('; '));
 }
 
 const descriptive = {
@@ -402,6 +485,12 @@ const descriptive = {
   mumpsFullSoRate: counters.mumpsN
     ? { n: counters.mumpsN, full: counters.mumpsFullSo, rate: counters.mumpsFullSo / counters.mumpsN }
     : null,
+  aomMixed: {
+    nSevGe1: counters.aomSevN,
+    mixed: counters.aomMixedN,
+    rate: counters.aomSevN ? counters.aomMixedN / counters.aomSevN : null,
+    geomOk: counters.aomMixedOk,
+  },
 };
 
 const summary = {
@@ -430,7 +519,7 @@ const summary = {
     packageVersion: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version,
   },
   overallPass: results.every((r) => {
-    if (r.id === 'T6a') return String(r.note).includes('%');
+    if (r.id === 'T6a' || r.id === 'T6c' || r.id === 'T11') return true;
     if (r.id.startsWith('G') || r.id.startsWith('T')) return r.ok === r.n || r.rate >= 99.5;
     return true;
   }),
@@ -462,7 +551,8 @@ const md = [
   '## 記述統計（グリッド由来）',
   '',
   `- 伝音ABG（病側・BC周波数）: ${fmtQ(descriptive.chlAbg)}`,
-  `- 騒音切痕の深さ（4k−2k AC, 程度≥1）: ${fmtQ(descriptive.noiseDepth)}`,
+  `- C5-dipの深さ（4k−2k AC, 程度≥1）: ${fmtQ(descriptive.noiseDepth)}`,
+  `- AOM混合型（程度≥1）: ${descriptive.aomMixed.mixed}/${descriptive.aomMixed.nSevGe1} (${((descriptive.aomMixed.rate || 0) * 100).toFixed(1)}%)。付与例の4k BC>0.5k BCは ${descriptive.aomMixed.geomOk}/${descriptive.aomMixed.mixed}`,
   `- Carhart様の深さ（BC2−mean(BC1,BC4), 発現例）: ${fmtQ(descriptive.carhartDepth)}`,
   `- 一側差 Sudden（程度≥1 全体）: ${fmtQ(descriptive.unilateralSudden)}`,
   `- 一側差 Sudden 程度1: ${fmtQ(descriptive.unilateralSuddenSev1)}`,
@@ -479,6 +569,7 @@ const md = [
   `- Carhart様: Bernoulli（rand()<0.8）。決定論的80%割付ではない。グリッド発現 ${counters.carhartExprN}/720、T6a観測160/200。`,
   `- T8内訳: 正常以外9プロファイル × 6年齢 × 2性別 × 5 seed = 540セル`,
   `- T6a/T6b: T6aは200試行中の発現件数。T6bは発現例を200件集めて幾何適合を見る（分母が異なる）。`,
+  `- T11: 同一条件でseedのみ変えた200件のユニーク出力数（5 dB丸めのため全件不一致は要求しない）。`,
   '',
   `実行: Node ${summary.runtime.node} / ${summary.runtime.platform} / ${summary.runtime.packageName}@${summary.runtime.packageVersion}`,
   '',].join('\n');

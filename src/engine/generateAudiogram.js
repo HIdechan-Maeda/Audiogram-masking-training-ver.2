@@ -169,6 +169,8 @@ function correlateLeft(rand, rightRows, sex, age) {
 // プロファイル変換の簡略版（まずは Normal と同時生成/片耳病型の枠を実装）
 /** 耳硬化 Carhart様の発現確率（severity≥1のとき）。臨床でも全例に明瞭でないことを踏まえた教育用仕様。 */
 export const CARHART_EXPRESSION_PROB = 0.8;
+/** AOM: 程度≥1で混合型（高音骨導上昇）を付与する教育用比率。臨床発生率ではない */
+export const AOM_MIXED_PROB = 0.5;
 /** 検証・仕様上の Carhart様定義: BC2k − mean(BC1k, BC4k) ≥ 5 dB かつ BC2k が隣接両側より悪い */
 export const CARHART_MIN_DEPTH_DB = 5;
 
@@ -228,21 +230,82 @@ function applySuddenScaleOut(rows, mode, include2k) {
   });
 }
 
+/** C5-dip: AC(4 kHz) > AC(2 kHz) かつ AC(4 kHz) > AC(8 kHz)（8 kHzでの回復） */
 function enforceNoiseNotchGeometry(rows) {
   const by = Object.fromEntries(rows.map((r) => [r.freq, r]));
   const r2 = by['2kHz'];
   const r4 = by['4kHz'];
+  const r8 = by['8kHz'];
   if (!r2 || !r4 || typeof r2.ac !== 'number' || typeof r4.ac !== 'number') return rows;
-  if (r4.ac > r2.ac) return rows;
-  const lim = LIMITS_AC['4kHz'];
-  const target = roundTo5(clamp(r2.ac + 5, lim.min, lim.max));
+
+  const lim4 = LIMITS_AC['4kHz'];
+  let ac4 = r4.ac;
+  let ac8 = typeof r8?.ac === 'number' ? r8.ac : null;
+
+  // 4 kHz > 2 kHz
+  if (!(ac4 > r2.ac)) {
+    ac4 = roundTo5(clamp(r2.ac + 5, lim4.min, lim4.max));
+  }
+
+  // 4 kHz > 8 kHz（回復）。まず 4 kHz を上げ、なお不足なら 8 kHz を下げる
+  if (ac8 != null && !(ac4 > ac8)) {
+    ac4 = Math.max(ac4, roundTo5(clamp(ac8 + 5, lim4.min, lim4.max)));
+    if (!(ac4 > ac8)) {
+      const lim8 = LIMITS_AC['8kHz'];
+      ac8 = roundTo5(clamp(ac4 - 5, lim8.min, lim8.max));
+    }
+    if (!(ac4 > ac8)) {
+      ac4 = lim4.max;
+      const lim8 = LIMITS_AC['8kHz'];
+      ac8 = roundTo5(clamp(ac4 - 5, lim8.min, lim8.max));
+    }
+  }
+
   return rows.map((r) => {
-    if (r.freq !== '4kHz') return r;
-    const ac = Math.max(r.ac, target);
+    if (r.freq === '4kHz') {
+      let bc = r.bc;
+      if (typeof bc === 'number') {
+        const limB = LIMITS_BC['4kHz'];
+        bc = roundTo5(clamp(Math.min(bc, ac4 + 5), limB.min, limB.max));
+      }
+      return { ...r, ac: ac4, bc };
+    }
+    if (r.freq === '8kHz' && ac8 != null && typeof r.ac === 'number') {
+      return { ...r, ac: ac8 };
+    }
+    return r;
+  });
+}
+
+/** AOM混合型: 4 kHz骨導が0.5 kHz骨導より悪く、気導は骨導を下回らない */
+function enforceAomMixedGeometry(rows) {
+  const by = Object.fromEntries(rows.map((r) => [r.freq, r]));
+  const r05 = by['0.5kHz'];
+  const r2 = by['2kHz'];
+  const r4 = by['4kHz'];
+  if (!r05 || !r2 || !r4) return rows;
+  if (![r05.bc, r2.bc, r4.bc].every((v) => typeof v === 'number')) return rows;
+
+  let bc05 = r05.bc;
+  let bc2 = r2.bc;
+  let bc4 = r4.bc;
+  const lim2 = LIMITS_BC['2kHz'];
+  const lim4 = LIMITS_BC['4kHz'];
+  if (!(bc4 > bc05)) {
+    bc4 = roundTo5(clamp(Math.max(bc4, bc05 + 10), lim4.min, lim4.max));
+  }
+  if (!(bc2 >= bc05)) {
+    bc2 = roundTo5(clamp(Math.max(bc2, bc05 + 5), lim2.min, lim2.max));
+  }
+
+  return rows.map((r) => {
+    let ac = r.ac;
     let bc = r.bc;
-    if (typeof bc === 'number') {
-      const limB = LIMITS_BC['4kHz'];
-      bc = roundTo5(clamp(Math.min(bc, ac + 5), limB.min, limB.max));
+    if (r.freq === '2kHz') bc = bc2;
+    if (r.freq === '4kHz') bc = bc4;
+    if (typeof ac === 'number' && typeof bc === 'number' && bc > ac) {
+      const limA = LIMITS_AC[r.freq];
+      ac = roundTo5(clamp(bc, limA.min, limA.max));
     }
     return { ...r, ac, bc };
   });
@@ -290,7 +353,7 @@ function enforceCarhartNotchGeometry(rows) {
 }
 
 function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands, ageForBands, options = {}) {
-  const { carhartApplied = false } = options;
+  const { carhartApplied = false, aomMixedApplied = false } = options;
   // まずは現状：ACにseverity応じたバイアスを加える軽量版
   const out = rows.map((r, idx, arr) => {
     let add = 0;
@@ -322,7 +385,8 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
       const w = { "0.125kHz": 0.6, "0.25kHz": 0.9, "0.5kHz": 1.0, "1kHz": 0.9, "2kHz": 0.5, "4kHz": 0.3, "8kHz": 0.2 }[r.freq] || 0;
       add = w * depth;
     } else if (profile === 'CHL_AOM') {
-      const depth = [0, 15, 25, 35][Math.min(3, Math.max(0, Math.round(severity||0)))];
+      // 伝音成分は低〜中音中心。OMEより大きいABGは医学的一般則としない（床はOMEと重複）
+      const depth = [0, 12, 22, 30][Math.min(3, Math.max(0, Math.round(severity||0)))];
       const w = { "0.125kHz": 0.7, "0.25kHz": 1.0, "0.5kHz": 1.0, "1kHz": 0.8, "2kHz": 0.4, "4kHz": 0.2, "8kHz": 0.1 }[r.freq] || 0;
       add = w * depth;
     } else if (profile === 'CHL_Otosclerosis') {
@@ -348,6 +412,12 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
           const carhart = [0, 6, 10, 15][Math.min(3, Math.max(0, Math.round(severity||0)))];
           bcRaw += wBC * carhart;
         }
+        // AOM混合型: 2–4 kHz中心の骨導上昇（教育用。臨床発生率の再現ではない）
+        if (profile === 'CHL_AOM' && aomMixedApplied) {
+          const wBC = { "1kHz": 0.2, "2kHz": 0.7, "4kHz": 1.0 }[r.freq] || 0;
+          const mix = [0, 10, 15, 22][Math.min(3, Math.max(0, Math.round(severity||0)))];
+          bcRaw += wBC * mix;
+        }
         bc = roundTo5(clamp(bcRaw, lim.min, lim.max));
       }
     } else {
@@ -363,7 +433,7 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
     if ((profile === 'CHL_OME' || profile === 'CHL_AOM' || profile === 'CHL_Otosclerosis' || profile === 'CHL_OssicularDiscontinuity') && isBCFreq(r.freq) && typeof outRow.bc === 'number') {
       const minMaps = {
         CHL_OME: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 8 },
-        CHL_AOM: { "0.25kHz": 15, "0.5kHz": 20, "1kHz": 15, "2kHz": 10, "4kHz": 5 },
+        CHL_AOM: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 8 },
         CHL_Otosclerosis: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 5 },
         CHL_OssicularDiscontinuity: { "0.25kHz": 20, "0.5kHz": 25, "1kHz": 25, "2kHz": 20, "4kHz": 15, "8kHz": 10 },
       };
@@ -463,7 +533,13 @@ export function generateAudiogram(opts = {}) {
     const roll = rand();
     carhartApplied = severity >= 1 && roll < CARHART_EXPRESSION_PROB;
   }
-  const profileOpts = { carhartApplied };
+  // AOM混合型: severity=0でも乱数を1回消費（同一seedで程度だけ変えたときのRNG位相を揃える）
+  let aomMixedApplied = false;
+  if (profile === 'CHL_AOM') {
+    const roll = rand();
+    aomMixedApplied = severity >= 1 && roll < AOM_MIXED_PROB;
+  }
+  const profileOpts = { carhartApplied, aomMixedApplied };
   
   // ステップ4: プロファイル（疾患パターン）を適用して難聴パターンを追加
   right = applyProfileTransform(rand, right, profile, severity, seed, sex, ageGroup, profileOpts);
@@ -540,7 +616,25 @@ export function generateAudiogram(opts = {}) {
     }
   }
 
-  // 騒音切痕: severity≥1 では 4 kHz AC > 2 kHz AC を保証
+  // AOM混合型: ゆらぎ後に高音骨導上昇と気導≥骨導を再拘束
+  if (aomMixedApplied) {
+    if (baseRightProfile === 'CHL_AOM') {
+      right = enforceAomMixedGeometry(right);
+      right = enforceMinAbg(right, baseRightProfile);
+      right = enforceBcRules(right, baseRightProfile);
+      right = enforceAomMixedGeometry(right);
+      right = enforceMinAbg(right, baseRightProfile);
+    }
+    if (baseLeftProfile === 'CHL_AOM') {
+      left = enforceAomMixedGeometry(left);
+      left = enforceMinAbg(left, baseLeftProfile);
+      left = enforceBcRules(left, baseLeftProfile);
+      left = enforceAomMixedGeometry(left);
+      left = enforceMinAbg(left, baseLeftProfile);
+    }
+  }
+
+  // C5-dip: severity≥1 では 4 kHz AC > 2 kHz AC かつ 4 kHz AC > 8 kHz AC を保証
   if (profile === 'SNHL_NoiseNotch' && severity >= 1) {
     if (baseRightProfile === 'SNHL_NoiseNotch') right = enforceNoiseNotchGeometry(right);
     if (baseLeftProfile === 'SNHL_NoiseNotch') left = enforceNoiseNotchGeometry(left);
@@ -608,7 +702,7 @@ export function generateAudiogram(opts = {}) {
   return {
     meta: {
       seed, sex, ageGroup, profile, severity, affectedSide,
-      rightProfile, leftProfile, forcedUnilateralAOM, carhartApplied,
+      rightProfile, leftProfile, forcedUnilateralAOM, carhartApplied, aomMixedApplied,
       suddenSoMode, suddenSoInclude2k,
     },
     right,
@@ -634,7 +728,7 @@ const CONDUCTIVE_PROFILES = new Set(['CHL_OME','CHL_AOM','CHL_Otosclerosis','CHL
 function enforceMinAbg(rows, earProfile) {
   const minMaps = {
     CHL_OME: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 8 },
-    CHL_AOM: { "0.25kHz": 15, "0.5kHz": 20, "1kHz": 15, "2kHz": 10, "4kHz": 5 },
+    CHL_AOM: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 8 },
     CHL_Otosclerosis: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 5 },
     CHL_OssicularDiscontinuity: { "0.25kHz": 20, "0.5kHz": 25, "1kHz": 25, "2kHz": 20, "4kHz": 15, "8kHz": 10 },
   };
@@ -656,7 +750,7 @@ function enforceBcRules(rows, earProfile) {
   const isConductive = CONDUCTIVE_PROFILES.has(earProfile);
   const minMaps = {
     CHL_OME: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 8 },
-    CHL_AOM: { "0.25kHz": 15, "0.5kHz": 20, "1kHz": 15, "2kHz": 10, "4kHz": 5 },
+    CHL_AOM: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 8 },
     CHL_Otosclerosis: { "0.25kHz": 10, "0.5kHz": 15, "1kHz": 15, "2kHz": 5 },
     CHL_OssicularDiscontinuity: { "0.25kHz": 20, "0.5kHz": 25, "1kHz": 25, "2kHz": 20, "4kHz": 15, "8kHz": 10 },
   };
