@@ -615,6 +615,9 @@ export default function InstructorDashboard({ instructor, onLogout }) {
             </div>
           )}
         </div>
+        </>
+        )}
+
       </div>
 
       {/* 学生詳細モーダル */}
@@ -801,8 +804,6 @@ export default function InstructorDashboard({ instructor, onLogout }) {
           </div>
         </div>
       )}
-        </>
-        )}
     </div>
   );
 }
