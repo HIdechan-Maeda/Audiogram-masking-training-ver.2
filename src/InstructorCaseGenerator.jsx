@@ -43,23 +43,31 @@ const FREQ_HZ = {
   '8kHz': 8000,
 };
 
-function dbY(db, h) {
-  const v = Math.max(-10, Math.min(120, db));
-  return ((v + 10) / 130) * h;
-}
+const DB_MIN = -10;
+const DB_MAX = 120;
+const FREQ_MIN_HZ = 125;
+const FREQ_MAX_HZ = 8000;
+/** 20 dB HL と 1 octave を同じ長さにする */
+const CELL = 64;
 
 function AudiogramPreview({ right, left }) {
-  const W = 640;
-  const H = 420;
+  const octaves = Math.log2(FREQ_MAX_HZ / FREQ_MIN_HZ);
+  const dbSpan = DB_MAX - DB_MIN;
   const padL = 52;
-  const padR = 16;
+  const padR = 20;
   const padT = 16;
-  const padB = 40;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
+  const padB = 44;
+  const plotW = octaves * CELL;
+  const plotH = (dbSpan / 20) * CELL;
+  const W = padL + plotW + padR;
+  const H = padT + plotH + padB;
   const freqs = EngineConstants.FREQS;
-  const xAt = (i) => padL + (i / (freqs.length - 1)) * plotW;
-  const yAt = (db) => padT + dbY(db, plotH);
+
+  const xAt = (freqKey) => padL + Math.log2(FREQ_HZ[freqKey] / FREQ_MIN_HZ) * CELL;
+  const yAt = (db) => {
+    const v = Math.max(DB_MIN, Math.min(DB_MAX, db));
+    return padT + ((v - DB_MIN) / 20) * CELL;
+  };
 
   const gridDb = [];
   for (let d = -10; d <= 120; d += 10) gridDb.push(d);
@@ -70,41 +78,52 @@ function AudiogramPreview({ right, left }) {
 
   const acPath = (ear) => {
     const pts = freqs
-      .map((f, i) => {
+      .map((f) => {
         const row = ear[f];
         if (!row || typeof row.ac !== 'number' || row.soAC) return null;
-        return `${xAt(i)},${yAt(row.ac)}`;
+        return `${xAt(f)},${yAt(row.ac)}`;
       })
       .filter(Boolean);
     return pts.length ? pts.join(' ') : null;
   };
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto bg-white rounded-lg border border-gray-200">
-      {gridDb.map((d) => (
-        <g key={d}>
-          <line x1={padL} y1={yAt(d)} x2={padL + plotW} y2={yAt(d)} stroke="#e5e7eb" />
-          <text x={padL - 8} y={yAt(d) + 4} textAnchor="end" fontSize="11" fill="#6b7280">{d}</text>
-        </g>
-      ))}
-      {freqs.map((f, i) => (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-xl h-auto bg-white rounded-lg border border-gray-200">
+      <rect x={padL} y={padT} width={plotW} height={plotH} fill="#fff" stroke="#9ca3af" />
+      {gridDb.map((d) => {
+        const major = ((d - DB_MIN) % 20) === 0;
+        return (
+          <g key={d}>
+            <line
+              x1={padL}
+              y1={yAt(d)}
+              x2={padL + plotW}
+              y2={yAt(d)}
+              stroke={major ? '#9ca3af' : '#e5e7eb'}
+              strokeWidth={major ? 1 : 0.75}
+            />
+            <text x={padL - 8} y={yAt(d) + 4} textAnchor="end" fontSize="11" fill="#6b7280">{d}</text>
+          </g>
+        );
+      })}
+      {freqs.map((f) => (
         <g key={f}>
-          <line x1={xAt(i)} y1={padT} x2={xAt(i)} y2={padT + plotH} stroke="#e5e7eb" />
-          <text x={xAt(i)} y={H - 12} textAnchor="middle" fontSize="11" fill="#6b7280">{FREQ_HZ[f]}</text>
+          <line x1={xAt(f)} y1={padT} x2={xAt(f)} y2={padT + plotH} stroke="#9ca3af" />
+          <text x={xAt(f)} y={H - 14} textAnchor="middle" fontSize="11" fill="#6b7280">{FREQ_HZ[f]}</text>
         </g>
       ))}
-      <text x={16} y={padT + plotH / 2} fontSize="11" fill="#6b7280" transform={`rotate(-90 16 ${padT + plotH / 2})`}>dB HL</text>
+      <text x={14} y={padT + plotH / 2} fontSize="11" fill="#6b7280" transform={`rotate(-90 14 ${padT + plotH / 2})`}>dB HL</text>
       <text x={padL + plotW / 2} y={H - 2} textAnchor="middle" fontSize="11" fill="#6b7280">Hz</text>
 
       {acPath(R) && <polyline points={acPath(R)} fill="none" stroke="#dc2626" strokeWidth="1.5" />}
       {acPath(L) && <polyline points={acPath(L)} fill="none" stroke="#2563eb" strokeWidth="1.5" strokeDasharray="4 3" />}
 
-      {freqs.map((f, i) => {
+      {freqs.map((f) => {
         const r = R[f];
         const l = L[f];
+        const x = xAt(f);
         const nodes = [];
         if (r && typeof r.ac === 'number') {
-          const x = xAt(i);
           const y = yAt(r.ac);
           if (r.soAC) {
             nodes.push(<path key={`${f}-rac-so`} d={`M${x} ${y} L${x} ${y + 14} M${x - 5} ${y + 8} L${x} ${y + 14} L${x + 5} ${y + 8}`} stroke="#dc2626" fill="none" strokeWidth="2" />);
@@ -113,7 +132,6 @@ function AudiogramPreview({ right, left }) {
           }
         }
         if (l && typeof l.ac === 'number') {
-          const x = xAt(i);
           const y = yAt(l.ac);
           if (l.soAC) {
             nodes.push(<path key={`${f}-lac-so`} d={`M${x} ${y} L${x} ${y + 14} M${x - 5} ${y + 8} L${x} ${y + 14} L${x + 5} ${y + 8}`} stroke="#2563eb" fill="none" strokeWidth="2" />);
@@ -127,14 +145,12 @@ function AudiogramPreview({ right, left }) {
           }
         }
         if (r && typeof r.bc === 'number' && !['0.125kHz', '8kHz'].includes(f)) {
-          const x = xAt(i) - 10;
           const y = yAt(r.bc);
-          nodes.push(<path key={`${f}-rbc`} d={`M${x + 6} ${y - 6} L${x} ${y} L${x + 6} ${y + 6}`} stroke="#dc2626" fill="none" strokeWidth="2" />);
+          nodes.push(<path key={`${f}-rbc`} d={`M${x - 4} ${y - 6} L${x - 10} ${y} L${x - 4} ${y + 6}`} stroke="#dc2626" fill="none" strokeWidth="2" />);
         }
         if (l && typeof l.bc === 'number' && !['0.125kHz', '8kHz'].includes(f)) {
-          const x = xAt(i) + 10;
           const y = yAt(l.bc);
-          nodes.push(<path key={`${f}-lbc`} d={`M${x - 6} ${y - 6} L${x} ${y} L${x - 6} ${y + 6}`} stroke="#2563eb" fill="none" strokeWidth="2" />);
+          nodes.push(<path key={`${f}-lbc`} d={`M${x + 4} ${y - 6} L${x + 10} ${y} L${x + 4} ${y + 6}`} stroke="#2563eb" fill="none" strokeWidth="2" />);
         }
         return nodes;
       })}
