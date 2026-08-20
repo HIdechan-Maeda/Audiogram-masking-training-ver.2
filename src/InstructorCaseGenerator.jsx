@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { forwardRef, useMemo, useRef, useState } from 'react';
 import { generateAudiogram, EngineConstants } from './engine/generateAudiogram';
 
 const PROFILE_LABELS = {
@@ -62,7 +62,7 @@ function SoArrow({ x, y, color }) {
   );
 }
 
-function AudiogramPreview({ right, left }) {
+function audiogramSvgDimensions() {
   const octaves = Math.log2(FREQ_MAX_HZ / FREQ_MIN_HZ);
   const dbSpan = DB_MAX - DB_MIN;
   const padL = 52;
@@ -71,8 +71,54 @@ function AudiogramPreview({ right, left }) {
   const padB = 44;
   const plotW = octaves * CELL;
   const plotH = (dbSpan / 20) * CELL;
-  const W = padL + plotW + padR;
-  const H = padT + plotH + padB;
+  return { W: padL + plotW + padR, H: padT + plotH + padB, padL, padR, padT, padB, plotW, plotH };
+}
+
+async function downloadSvgAsPng(svgEl, filename, scale = 2) {
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.removeAttribute('class');
+  const { W, H } = audiogramSvgDimensions();
+  clone.setAttribute('width', String(W));
+  clone.setAttribute('height', String(H));
+
+  const svgData = new XMLSerializer().serializeToString(clone);
+  const url = URL.createObjectURL(new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' }));
+
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = url;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W * scale;
+    canvas.height = H * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = filename;
+    link.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function buildAudiogramPngFilename(meta) {
+  const date = new Date().toISOString().slice(0, 10);
+  const profile = (meta?.profile || 'case').replace(/[^a-zA-Z0-9_-]/g, '');
+  return `audiogram_${profile}_seed${meta?.seed ?? 'new'}_${date}.png`;
+}
+
+const AudiogramPreview = forwardRef(function AudiogramPreview({ right, left }, ref) {
+  const { W, H, padL, padT, plotW, plotH } = audiogramSvgDimensions();
+
   const freqs = EngineConstants.FREQS;
 
   const xAt = (freqKey) => padL + Math.log2(FREQ_HZ[freqKey] / FREQ_MIN_HZ) * CELL;
@@ -100,7 +146,11 @@ function AudiogramPreview({ right, left }) {
   };
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-xl h-auto bg-white rounded-lg border border-gray-200">
+    <svg
+      ref={ref}
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full max-w-xl h-auto bg-white rounded-lg border border-gray-200"
+    >
       <rect x={padL} y={padT} width={plotW} height={plotH} fill="#fff" stroke="#9ca3af" />
       {gridDb.map((d) => {
         const isZero = d === 0;
@@ -191,7 +241,7 @@ function AudiogramPreview({ right, left }) {
       })}
     </svg>
   );
-}
+});
 
 function ThresholdTable({ right, left }) {
   const freqs = EngineConstants.FREQS;
@@ -243,8 +293,26 @@ export default function InstructorCaseGenerator() {
   const [affectedSide, setAffectedSide] = useState('auto');
   const [seedInput, setSeedInput] = useState('');
   const [caseData, setCaseData] = useState(null);
+  const [pngBusy, setPngBusy] = useState(false);
+  const audiogramSvgRef = useRef(null);
 
   const needsSide = UNILATERAL.has(profile);
+
+  const downloadPng = async () => {
+    if (!audiogramSvgRef.current || !caseData) return;
+    setPngBusy(true);
+    try {
+      await downloadSvgAsPng(
+        audiogramSvgRef.current,
+        buildAudiogramPngFilename(caseData.meta),
+      );
+    } catch (err) {
+      console.error('PNG export failed', err);
+      window.alert('PNGの保存に失敗しました。');
+    } finally {
+      setPngBusy(false);
+    }
+  };
 
   const generate = () => {
     const opts = { ageGroup, sex, profile, severity: Number(severity) };
@@ -365,7 +433,18 @@ export default function InstructorCaseGenerator() {
             ))}
           </div>
           <p className="text-xs text-gray-500">記号は測定画面と同じ（右＝赤・左＝青）。学習者の正答照合は緑です。</p>
-          <AudiogramPreview right={caseData.right} left={caseData.left} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={downloadPng}
+              disabled={pngBusy}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 text-sm"
+            >
+              {pngBusy ? 'PNG保存中…' : 'PNGで保存'}
+            </button>
+            <span className="text-xs text-gray-400">プレビューと同じ記号・縦横比で出力します</span>
+          </div>
+          <AudiogramPreview ref={audiogramSvgRef} right={caseData.right} left={caseData.left} />
           <ThresholdTable right={caseData.right} left={caseData.left} />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
             {['ティンパノメトリー', 'ART', 'DPOAE'].map((name) => (
