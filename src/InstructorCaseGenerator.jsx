@@ -49,6 +49,18 @@ const FREQ_MIN_HZ = 125;
 const FREQ_MAX_HZ = 8000;
 /** 20 dB HL と 1 octave を同じ長さにする */
 const CELL = 64;
+const MARK_R = 5;
+
+function SoArrow({ x, y, color }) {
+  const base = y + MARK_R + 2;
+  return (
+    <g stroke={color} fill="none" strokeWidth="2">
+      <line x1={x} y1={base} x2={x} y2={base + 8} />
+      <line x1={x - 4} y1={base + 4} x2={x} y2={base + 8} />
+      <line x1={x + 4} y1={base + 4} x2={x} y2={base + 8} />
+    </g>
+  );
+}
 
 function AudiogramPreview({ right, left }) {
   const octaves = Math.log2(FREQ_MAX_HZ / FREQ_MIN_HZ);
@@ -91,7 +103,7 @@ function AudiogramPreview({ right, left }) {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-xl h-auto bg-white rounded-lg border border-gray-200">
       <rect x={padL} y={padT} width={plotW} height={plotH} fill="#fff" stroke="#9ca3af" />
       {gridDb.map((d) => {
-        const major = ((d - DB_MIN) % 20) === 0;
+        const isZero = d === 0;
         return (
           <g key={d}>
             <line
@@ -99,8 +111,8 @@ function AudiogramPreview({ right, left }) {
               y1={yAt(d)}
               x2={padL + plotW}
               y2={yAt(d)}
-              stroke={major ? '#9ca3af' : '#e5e7eb'}
-              strokeWidth={major ? 1 : 0.75}
+              stroke={isZero ? '#374151' : '#e5e7eb'}
+              strokeWidth={isZero ? 2 : 0.75}
             />
             <text x={padL - 8} y={yAt(d) + 4} textAnchor="end" fontSize="11" fill="#6b7280">{d}</text>
           </g>
@@ -126,31 +138,54 @@ function AudiogramPreview({ right, left }) {
         if (r && typeof r.ac === 'number') {
           const y = yAt(r.ac);
           if (r.soAC) {
-            nodes.push(<path key={`${f}-rac-so`} d={`M${x} ${y} L${x} ${y + 14} M${x - 5} ${y + 8} L${x} ${y + 14} L${x + 5} ${y + 8}`} stroke="#dc2626" fill="none" strokeWidth="2" />);
+            nodes.push(
+              <g key={`${f}-rac-so`}>
+                <circle cx={x} cy={y} r={MARK_R} fill="none" stroke="#dc2626" strokeWidth="2" />
+                <SoArrow x={x} y={y} color="#dc2626" />
+              </g>
+            );
           } else {
-            nodes.push(<circle key={`${f}-rac`} cx={x} cy={y} r="5" fill="none" stroke="#dc2626" strokeWidth="2" />);
+            nodes.push(<circle key={`${f}-rac`} cx={x} cy={y} r={MARK_R} fill="none" stroke="#dc2626" strokeWidth="2" />);
           }
         }
         if (l && typeof l.ac === 'number') {
           const y = yAt(l.ac);
           if (l.soAC) {
-            nodes.push(<path key={`${f}-lac-so`} d={`M${x} ${y} L${x} ${y + 14} M${x - 5} ${y + 8} L${x} ${y + 14} L${x + 5} ${y + 8}`} stroke="#2563eb" fill="none" strokeWidth="2" />);
+            nodes.push(
+              <g key={`${f}-lac-so`}>
+                <line x1={x - MARK_R} y1={y - MARK_R} x2={x + MARK_R} y2={y + MARK_R} stroke="#2563eb" strokeWidth="2" />
+                <line x1={x + MARK_R} y1={y - MARK_R} x2={x - MARK_R} y2={y + MARK_R} stroke="#2563eb" strokeWidth="2" />
+                <SoArrow x={x} y={y} color="#2563eb" />
+              </g>
+            );
           } else {
             nodes.push(
               <g key={`${f}-lac`}>
-                <line x1={x - 5} y1={y - 5} x2={x + 5} y2={y + 5} stroke="#2563eb" strokeWidth="2" />
-                <line x1={x + 5} y1={y - 5} x2={x - 5} y2={y + 5} stroke="#2563eb" strokeWidth="2" />
+                <line x1={x - MARK_R} y1={y - MARK_R} x2={x + MARK_R} y2={y + MARK_R} stroke="#2563eb" strokeWidth="2" />
+                <line x1={x + MARK_R} y1={y - MARK_R} x2={x - MARK_R} y2={y + MARK_R} stroke="#2563eb" strokeWidth="2" />
               </g>
             );
           }
         }
         if (r && typeof r.bc === 'number' && !['0.125kHz', '8kHz'].includes(f)) {
           const y = yAt(r.bc);
-          nodes.push(<path key={`${f}-rbc`} d={`M${x - 4} ${y - 6} L${x - 10} ${y} L${x - 4} ${y + 6}`} stroke="#dc2626" fill="none" strokeWidth="2" />);
+          const bcX = x - 8;
+          nodes.push(
+            <g key={`${f}-rbc${r.soBC ? '-so' : ''}`}>
+              <path d={`M${bcX + 4} ${y - 6} L${bcX} ${y} L${bcX + 4} ${y + 6}`} stroke="#dc2626" fill="none" strokeWidth="2" />
+              {r.soBC && <SoArrow x={bcX} y={y} color="#dc2626" />}
+            </g>
+          );
         }
         if (l && typeof l.bc === 'number' && !['0.125kHz', '8kHz'].includes(f)) {
           const y = yAt(l.bc);
-          nodes.push(<path key={`${f}-lbc`} d={`M${x + 4} ${y - 6} L${x + 10} ${y} L${x + 4} ${y + 6}`} stroke="#2563eb" fill="none" strokeWidth="2" />);
+          const bcX = x + 8;
+          nodes.push(
+            <g key={`${f}-lbc${l.soBC ? '-so' : ''}`}>
+              <path d={`M${bcX - 4} ${y - 6} L${bcX} ${y} L${bcX - 4} ${y + 6}`} stroke="#2563eb" fill="none" strokeWidth="2" />
+              {l.soBC && <SoArrow x={bcX} y={y} color="#2563eb" />}
+            </g>
+          );
         }
         return nodes;
       })}
