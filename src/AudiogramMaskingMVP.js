@@ -21,11 +21,13 @@ import OtosclerosisCases from './data/Otosclerosis_cases.json';
 import { HEARING_DISORDERS } from './data/hearingDisorders';
 import { generateAudiogram } from './engine/generateAudiogram';
 import { preloadCaseDatabases, pickCaseFromDatabase } from './utils/caseDatabase';
+import GuidedMaskingReasoningPanel from './GuidedMaskingReasoningPanel';
 
 // Audiogram-first Masking Trainer (MVP v2.4.9)
 // - 1oct/grid x 10dB ticks; 1oct == 20dB; AC O/X, BC </> []
 // - Overlay blink; legend right-side panel; masking slider in header
 // - Fix: add targetMap + getThr() → resolves "getThr is not defined"
+// - Guided masking clinical-reasoning mode (要否→初期量→プラトー→振り返り)
 
 // --- constants ---
 // Optional click→dB calibration offset (kept 0 as per spec 1/2/3)
@@ -1300,6 +1302,7 @@ export default function AudiogramMaskingMVP() {
     }, {})
   );
   const [showIcDialog, setShowIcDialog] = useState(false);
+  const [guidedMaskingMode, setGuidedMaskingMode] = useState(false);
 
   // Random case performance tracking
   const [randomCasePerformance, setRandomCasePerformance] = useState(() => {
@@ -4927,11 +4930,11 @@ ${targets.map((target, index) => {
   // 学生IDログイン画面
   if (!isAuthenticated) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full mx-4">
+      <div className="w-full min-h-screen flex items-center justify-center bg-black text-white">
+        <div className="bg-neutral-900 rounded-2xl shadow-lg p-8 max-w-md w-full mx-4 border border-neutral-700">
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Audioscope EDU - オーディオグラム演習</h1>
-            <p className="text-gray-600">学生IDを入力してログインしてください</p>
+            <h1 className="text-2xl font-bold text-white mb-2">Audioscope EDU - オーディオグラム演習</h1>
+            <p className="text-neutral-300">学生IDを入力してログインしてください</p>
           </div>
           <div className="space-y-4">
             <div>
@@ -4972,7 +4975,7 @@ ${targets.map((target, index) => {
     );
   }
   return (
-    <div className="w-full min-h-screen p-6 md:p-10 bg-gray-50 text-gray-900" ref={containerRef}>
+    <div className="w-full min-h-screen p-6 md:p-10 bg-black text-white" ref={containerRef}>
       <div className="max-w-7xl mx-auto grid gap-6">
         <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div>
@@ -4982,6 +4985,17 @@ ${targets.map((target, index) => {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setGuidedMaskingMode((v) => !v)}
+              className={`px-3 py-1 text-sm rounded-lg ${
+                guidedMaskingMode
+                  ? 'bg-teal-700 text-white hover:bg-teal-800'
+                  : 'bg-teal-600 text-white hover:bg-teal-700'
+              }`}
+            >
+              {guidedMaskingMode ? '推論モード ON' : 'マスキング推論ガイド'}
+            </button>
             <button
               onClick={() => {
                 window.location.href = '/?view=eye-movement';
@@ -5005,6 +5019,14 @@ ${targets.map((target, index) => {
               className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
             >
               疫学データビューア
+            </button>
+            <button
+              onClick={() => {
+                window.location.href = '/?mode=instructor';
+              }}
+              className="px-3 py-1 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+            >
+              講師・教材生成
             </button>
             <button
               onClick={() => {
@@ -5188,13 +5210,30 @@ ${targets.map((target, index) => {
                 • 講師の指示に従って症例を選択してください<br/>
                 • 各自で操作しながら学習を進めてください<br/>
                 • 質問がある場合はチャットでお聞きください<br/>
-                • 進捗状況は自動的に保存されます
+                • 進捗状況は自動的に保存されます<br/>
+                • 「マスキング推論ガイド」で要否→初期量→プラトーの順に練習できます
               </div>
             </div>
           </div>
         </div>
 
-        
+        <GuidedMaskingReasoningPanel
+          active={guidedMaskingMode}
+          onActiveChange={setGuidedMaskingMode}
+          ear={ear}
+          trans={trans}
+          freq={freq}
+          maskLevel={maskLevel}
+          masked={masked}
+          targets={targets}
+          iaAC={icSettings[freq]?.AC ?? 50}
+          iaBC={icSettings[freq]?.BC ?? 0}
+          onApplyMask={(value) => {
+            setMasked(true);
+            setMaskLevel(value);
+          }}
+          onSetMasked={setMasked}
+        />
 
         {/* IC Settings */}
         <div className="bg-white rounded-2xl shadow p-4">
