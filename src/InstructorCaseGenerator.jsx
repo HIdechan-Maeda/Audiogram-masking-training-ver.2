@@ -62,6 +62,26 @@ function SoArrow({ x, y, color }) {
   );
 }
 
+function MaskedBcBracket({ x, y, color, ear }) {
+  const r = MARK_R;
+  if (ear === 'R') {
+    return (
+      <g stroke={color} fill="none" strokeWidth="2">
+        <line x1={x - r} y1={y - r} x2={x - r} y2={y + r} />
+        <line x1={x - r} y1={y - r} x2={x - r / 3} y2={y - r} />
+        <line x1={x - r} y1={y + r} x2={x - r / 3} y2={y + r} />
+      </g>
+    );
+  }
+  return (
+    <g stroke={color} fill="none" strokeWidth="2">
+      <line x1={x + r} y1={y - r} x2={x + r} y2={y + r} />
+      <line x1={x + r} y1={y - r} x2={x + r / 3} y2={y - r} />
+      <line x1={x + r} y1={y + r} x2={x + r / 3} y2={y + r} />
+    </g>
+  );
+}
+
 function audiogramSvgDimensions() {
   const octaves = Math.log2(FREQ_MAX_HZ / FREQ_MIN_HZ);
   const dbSpan = DB_MAX - DB_MIN;
@@ -222,7 +242,7 @@ const AudiogramPreview = forwardRef(function AudiogramPreview({ right, left }, r
           const bcX = x - 8;
           nodes.push(
             <g key={`${f}-rbc${r.soBC ? '-so' : ''}`}>
-              <path d={`M${bcX + 4} ${y - 6} L${bcX} ${y} L${bcX + 4} ${y + 6}`} stroke="#dc2626" fill="none" strokeWidth="2" />
+              <MaskedBcBracket x={bcX} y={y} color="#dc2626" ear="R" />
               {r.soBC && <SoArrow x={bcX} y={y} color="#dc2626" />}
             </g>
           );
@@ -232,7 +252,7 @@ const AudiogramPreview = forwardRef(function AudiogramPreview({ right, left }, r
           const bcX = x + 8;
           nodes.push(
             <g key={`${f}-lbc${l.soBC ? '-so' : ''}`}>
-              <path d={`M${bcX - 4} ${y - 6} L${bcX} ${y} L${bcX - 4} ${y + 6}`} stroke="#2563eb" fill="none" strokeWidth="2" />
+              <MaskedBcBracket x={bcX} y={y} color="#2563eb" ear="L" />
               {l.soBC && <SoArrow x={bcX} y={y} color="#2563eb" />}
             </g>
           );
