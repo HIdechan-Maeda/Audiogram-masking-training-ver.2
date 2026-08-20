@@ -716,6 +716,8 @@ function applyBcRandomJitter(rand, rows, options = {}) {
   const { stepOptions = [-10, -5, 0, 5, 10] } = options;
   return rows.map(r => {
     if (!isBCFreq(r.freq) || typeof r.bc !== 'number') return r;
+    // スケールアウト（SO）の行は、表示用の基準閾値（例: 4kHz BC=60dB）からズレないよう固定する
+    if (Boolean(r.soBC)) return r;
     const lim = LIMITS_BC[r.freq];
     const step = stepOptions[Math.floor(rand() * stepOptions.length)] || 0;
     const jittered = roundTo5(clamp(r.bc + step, lim.min, lim.max));
