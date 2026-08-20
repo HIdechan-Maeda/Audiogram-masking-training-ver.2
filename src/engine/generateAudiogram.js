@@ -140,6 +140,17 @@ function applySnhlBcNr(rows) {
   });
 }
 
+function pinSoBcRow(r) {
+  if (!Boolean(r.soBC) || !isBCFreq(r.freq)) return r;
+  const th = TH_SNHL_BC_NR[r.freq];
+  if (typeof th !== 'number') return r;
+  return { ...r, bc: roundTo5(th), soBC: true };
+}
+
+function finalizeSoBc(rows) {
+  return rows.map(pinSoBcRow);
+}
+
 // 片耳病型で非病側をNormal化
 function makeContralateralNormal(rand, sex, age) {
   const base = generateEarBase(rand, sex, age);
@@ -651,6 +662,8 @@ export function generateAudiogram(opts = {}) {
   });
   right = finalizeSo(right);
   left = finalizeSo(left);
+  right = finalizeSoBc(right);
+  left = finalizeSoBc(left);
 
   // 125 Hz / 8 kHz のBC内部ルール適用（表示には使わない）
   function applyBcEdgeInternal(rows, profileName) {
@@ -758,6 +771,7 @@ function enforceBcRules(rows, earProfile) {
   };
   return rows.map(r => {
     if (!isBCFreq(r.freq) || typeof r.bc !== 'number') return r;
+    if (Boolean(r.soBC)) return pinSoBcRow(r);
     const lim = LIMITS_BC[r.freq];
     let bc = roundTo5(clamp(r.bc, lim.min, lim.max));
     let ac = r.ac;
