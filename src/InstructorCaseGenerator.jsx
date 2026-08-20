@@ -1,0 +1,330 @@
+import React, { useMemo, useState } from 'react';
+import { generateAudiogram, EngineConstants } from './engine/generateAudiogram';
+
+const PROFILE_LABELS = {
+  Normal: '正常',
+  SNHL_Age: '加齢性感音難聴',
+  SNHL_NoiseNotch: '騒音性難聴',
+  SNHL_Meniere: 'メニエール病',
+  SNHL_Sudden: '突発性難聴',
+  SNHL_Mumps: 'ムンプス難聴',
+  CHL_OME: '滲出性中耳炎',
+  CHL_AOM: '急性中耳炎',
+  CHL_Otosclerosis: '耳硬化症',
+  CHL_OssicularDiscontinuity: '耳小骨連鎖完全離断',
+};
+
+const AGE_LABELS = {
+  '20s': '20歳代',
+  '30s': '30歳代',
+  '40s': '40歳代',
+  '50s': '50歳代',
+  '60s': '60歳代',
+  '70s': '70歳代',
+};
+
+const SEVERITY_LABELS = ['なし', '軽度', '中等度', '重度'];
+
+const UNILATERAL = new Set([
+  'SNHL_Sudden',
+  'SNHL_Meniere',
+  'SNHL_Mumps',
+  'CHL_OssicularDiscontinuity',
+  'CHL_AOM',
+]);
+
+const FREQ_HZ = {
+  '0.125kHz': 125,
+  '0.25kHz': 250,
+  '0.5kHz': 500,
+  '1kHz': 1000,
+  '2kHz': 2000,
+  '4kHz': 4000,
+  '8kHz': 8000,
+};
+
+function dbY(db, h) {
+  const v = Math.max(-10, Math.min(120, db));
+  return ((v + 10) / 130) * h;
+}
+
+function AudiogramPreview({ right, left }) {
+  const W = 640;
+  const H = 420;
+  const padL = 52;
+  const padR = 16;
+  const padT = 16;
+  const padB = 40;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const freqs = EngineConstants.FREQS;
+  const xAt = (i) => padL + (i / (freqs.length - 1)) * plotW;
+  const yAt = (db) => padT + dbY(db, plotH);
+
+  const gridDb = [];
+  for (let d = -10; d <= 120; d += 10) gridDb.push(d);
+
+  const rowMap = (rows) => Object.fromEntries((rows || []).map((r) => [r.freq, r]));
+  const R = rowMap(right);
+  const L = rowMap(left);
+
+  const acPath = (ear) => {
+    const pts = freqs
+      .map((f, i) => {
+        const row = ear[f];
+        if (!row || typeof row.ac !== 'number' || row.soAC) return null;
+        return `${xAt(i)},${yAt(row.ac)}`;
+      })
+      .filter(Boolean);
+    return pts.length ? pts.join(' ') : null;
+  };
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto bg-white rounded-lg border border-gray-200">
+      {gridDb.map((d) => (
+        <g key={d}>
+          <line x1={padL} y1={yAt(d)} x2={padL + plotW} y2={yAt(d)} stroke="#e5e7eb" />
+          <text x={padL - 8} y={yAt(d) + 4} textAnchor="end" fontSize="11" fill="#6b7280">{d}</text>
+        </g>
+      ))}
+      {freqs.map((f, i) => (
+        <g key={f}>
+          <line x1={xAt(i)} y1={padT} x2={xAt(i)} y2={padT + plotH} stroke="#e5e7eb" />
+          <text x={xAt(i)} y={H - 12} textAnchor="middle" fontSize="11" fill="#6b7280">{FREQ_HZ[f]}</text>
+        </g>
+      ))}
+      <text x={16} y={padT + plotH / 2} fontSize="11" fill="#6b7280" transform={`rotate(-90 16 ${padT + plotH / 2})`}>dB HL</text>
+      <text x={padL + plotW / 2} y={H - 2} textAnchor="middle" fontSize="11" fill="#6b7280">Hz</text>
+
+      {acPath(R) && <polyline points={acPath(R)} fill="none" stroke="#dc2626" strokeWidth="1.5" />}
+      {acPath(L) && <polyline points={acPath(L)} fill="none" stroke="#2563eb" strokeWidth="1.5" strokeDasharray="4 3" />}
+
+      {freqs.map((f, i) => {
+        const r = R[f];
+        const l = L[f];
+        const nodes = [];
+        if (r && typeof r.ac === 'number') {
+          const x = xAt(i);
+          const y = yAt(r.ac);
+          if (r.soAC) {
+            nodes.push(<path key={`${f}-rac-so`} d={`M${x} ${y} L${x} ${y + 14} M${x - 5} ${y + 8} L${x} ${y + 14} L${x + 5} ${y + 8}`} stroke="#dc2626" fill="none" strokeWidth="2" />);
+          } else {
+            nodes.push(<circle key={`${f}-rac`} cx={x} cy={y} r="5" fill="none" stroke="#dc2626" strokeWidth="2" />);
+          }
+        }
+        if (l && typeof l.ac === 'number') {
+          const x = xAt(i);
+          const y = yAt(l.ac);
+          if (l.soAC) {
+            nodes.push(<path key={`${f}-lac-so`} d={`M${x} ${y} L${x} ${y + 14} M${x - 5} ${y + 8} L${x} ${y + 14} L${x + 5} ${y + 8}`} stroke="#2563eb" fill="none" strokeWidth="2" />);
+          } else {
+            nodes.push(
+              <g key={`${f}-lac`}>
+                <line x1={x - 5} y1={y - 5} x2={x + 5} y2={y + 5} stroke="#2563eb" strokeWidth="2" />
+                <line x1={x + 5} y1={y - 5} x2={x - 5} y2={y + 5} stroke="#2563eb" strokeWidth="2" />
+              </g>
+            );
+          }
+        }
+        if (r && typeof r.bc === 'number' && !['0.125kHz', '8kHz'].includes(f)) {
+          const x = xAt(i) - 10;
+          const y = yAt(r.bc);
+          nodes.push(<path key={`${f}-rbc`} d={`M${x + 6} ${y - 6} L${x} ${y} L${x + 6} ${y + 6}`} stroke="#dc2626" fill="none" strokeWidth="2" />);
+        }
+        if (l && typeof l.bc === 'number' && !['0.125kHz', '8kHz'].includes(f)) {
+          const x = xAt(i) + 10;
+          const y = yAt(l.bc);
+          nodes.push(<path key={`${f}-lbc`} d={`M${x - 6} ${y - 6} L${x} ${y} L${x - 6} ${y + 6}`} stroke="#2563eb" fill="none" strokeWidth="2" />);
+        }
+        return nodes;
+      })}
+    </svg>
+  );
+}
+
+function ThresholdTable({ right, left }) {
+  const freqs = EngineConstants.FREQS;
+  const fmt = (row, key) => {
+    if (!row) return '—';
+    if (key === 'ac' && row.soAC) return 'SO';
+    if (key === 'bc' && (row.soBC || row.bc == null)) return row.bc == null ? '—' : 'SO';
+    const v = row[key];
+    return typeof v === 'number' ? v : '—';
+  };
+  const R = Object.fromEntries((right || []).map((r) => [r.freq, r]));
+  const L = Object.fromEntries((left || []).map((r) => [r.freq, r]));
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-xs border-collapse">
+        <thead>
+          <tr className="bg-gray-50">
+            <th className="border px-2 py-1 text-left">周波数</th>
+            {freqs.map((f) => (
+              <th key={f} className="border px-2 py-1">{FREQ_HZ[f]}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            ['右 AC', R, 'ac'],
+            ['右 BC', R, 'bc'],
+            ['左 AC', L, 'ac'],
+            ['左 BC', L, 'bc'],
+          ].map(([label, map, key]) => (
+            <tr key={label}>
+              <td className="border px-2 py-1 font-medium whitespace-nowrap">{label}</td>
+              {freqs.map((f) => (
+                <td key={f} className="border px-2 py-1 text-center">{fmt(map[f], key)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function InstructorCaseGenerator() {
+  const [ageGroup, setAgeGroup] = useState('40s');
+  const [sex, setSex] = useState('Female');
+  const [profile, setProfile] = useState('Normal');
+  const [severity, setSeverity] = useState(2);
+  const [affectedSide, setAffectedSide] = useState('auto');
+  const [seedInput, setSeedInput] = useState('');
+  const [caseData, setCaseData] = useState(null);
+
+  const needsSide = UNILATERAL.has(profile);
+
+  const generate = () => {
+    const opts = { ageGroup, sex, profile, severity: Number(severity) };
+    if (needsSide && affectedSide !== 'auto') opts.affectedSide = affectedSide;
+    if (seedInput !== '' && Number.isFinite(Number(seedInput))) opts.seed = Number(seedInput);
+    const data = generateAudiogram(opts);
+    setCaseData(data);
+    setSeedInput(String(data.meta.seed));
+  };
+
+  const metaBits = useMemo(() => {
+    if (!caseData) return [];
+    const m = caseData.meta;
+    const bits = [
+      `seed ${m.seed}`,
+      AGE_LABELS[m.ageGroup] || m.ageGroup,
+      m.sex === 'Male' ? '男性' : '女性',
+      PROFILE_LABELS[m.profile] || m.profile,
+      `程度: ${SEVERITY_LABELS[m.severity] ?? m.severity}`,
+    ];
+    if (m.affectedSide) bits.push(`患側: ${m.affectedSide === 'R' ? '右' : '左'}`);
+    if (m.carhartApplied) bits.push('Carhart様付与');
+    if (m.aomMixedApplied) bits.push('AOM混合型');
+    return bits;
+  }, [caseData]);
+
+  const selectClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white';
+
+  return (
+    <div className="bg-white rounded-2xl shadow p-6">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-gray-900">教材生成（試作）</h2>
+        <p className="text-sm text-gray-600 mt-1">
+          学習者画面には出さない条件指定です。授業デモ・内容確認用。いまはオージオグラムのみ。TYM／ART／DPOAE は同じ症例につなぐ予定です。
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+        <label className="text-sm text-gray-700">
+          年齢群
+          <select className={`${selectClass} mt-1`} value={ageGroup} onChange={(e) => setAgeGroup(e.target.value)}>
+            {EngineConstants.AGE_GROUPS.map((g) => (
+              <option key={g} value={g}>{AGE_LABELS[g]}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm text-gray-700">
+          性別
+          <select className={`${selectClass} mt-1`} value={sex} onChange={(e) => setSex(e.target.value)}>
+            <option value="Female">女性</option>
+            <option value="Male">男性</option>
+          </select>
+        </label>
+        <label className="text-sm text-gray-700">
+          聴力像パターン
+          <select className={`${selectClass} mt-1`} value={profile} onChange={(e) => setProfile(e.target.value)}>
+            {EngineConstants.PROFILES.map((p) => (
+              <option key={p} value={p}>{PROFILE_LABELS[p] || p}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm text-gray-700">
+          程度
+          <select className={`${selectClass} mt-1`} value={severity} onChange={(e) => setSeverity(Number(e.target.value))}>
+            {SEVERITY_LABELS.map((lab, i) => (
+              <option key={i} value={i}>{lab}（{i}）</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm text-gray-700">
+          患側
+          <select
+            className={`${selectClass} mt-1`}
+            value={affectedSide}
+            onChange={(e) => setAffectedSide(e.target.value)}
+            disabled={!needsSide}
+          >
+            <option value="auto">自動</option>
+            <option value="R">右</option>
+            <option value="L">左</option>
+          </select>
+          {!needsSide && <span className="block text-xs text-gray-400 mt-1">両側性パターンでは使いません</span>}
+        </label>
+        <label className="text-sm text-gray-700">
+          乱数初期値（seed）
+          <input
+            className={`${selectClass} mt-1`}
+            type="number"
+            placeholder="空欄で新規"
+            value={seedInput}
+            onChange={(e) => setSeedInput(e.target.value)}
+          />
+        </label>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-6">
+        <button
+          type="button"
+          onClick={generate}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+        >
+          オージオグラムを生成
+        </button>
+        <button
+          type="button"
+          onClick={() => { setSeedInput(''); setCaseData(null); }}
+          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
+        >
+          クリア
+        </button>
+      </div>
+
+      {caseData && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {metaBits.map((b) => (
+              <span key={b} className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-100">{b}</span>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500">記号は測定画面と同じ（右＝赤・左＝青）。学習者の正答照合は緑です。</p>
+          <AudiogramPreview right={caseData.right} left={caseData.left} />
+          <ThresholdTable right={caseData.right} left={caseData.left} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            {['ティンパノメトリー', 'ART', 'DPOAE'].map((name) => (
+              <div key={name} className="border border-dashed border-gray-300 rounded-xl p-4 text-gray-400">
+                {name}（未接続）
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

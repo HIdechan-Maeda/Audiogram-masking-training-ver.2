@@ -9,8 +9,10 @@ import {
   countPresetCompletions,
   averageAccuracyForPresets,
 } from './usageEvents';
+import InstructorCaseGenerator from './InstructorCaseGenerator';
 
 export default function InstructorDashboard({ instructor, onLogout }) {
+  const [mainTab, setMainTab] = useState('progress');
   const [students, setStudents] = useState([]);
   const [stats, setStats] = useState({
     totalStudents: 0,
@@ -285,6 +287,22 @@ export default function InstructorDashboard({ instructor, onLogout }) {
               <h1 className="text-2xl font-bold text-gray-900">Audioscope EDU - 講師用ダッシュボード</h1>
               <p className="text-sm text-gray-600 mt-1">講師: {instructor.name}</p>
               <p className="text-xs text-gray-500 mt-0.5">学生データ・使用履歴は自動更新されません。「更新」で最新を取得してください。</p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => setMainTab('progress')}
+                  className={`px-3 py-1.5 rounded-lg text-sm ${mainTab === 'progress' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                >
+                  進捗
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMainTab('generate')}
+                  className={`px-3 py-1.5 rounded-lg text-sm ${mainTab === 'generate' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                >
+                  教材生成
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-4">
               <button
@@ -304,6 +322,12 @@ export default function InstructorDashboard({ instructor, onLogout }) {
           </div>
         </header>
 
+        {mainTab === 'generate' && (
+          <InstructorCaseGenerator />
+        )}
+
+        {mainTab === 'progress' && (
+        <>
         {/* 統計カード */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <div className="bg-blue-50 rounded-xl p-5 border border-blue-200">
@@ -776,6 +800,8 @@ export default function InstructorDashboard({ instructor, onLogout }) {
           </div>
         </div>
       )}
+        </>
+        )}
     </div>
   );
 }
