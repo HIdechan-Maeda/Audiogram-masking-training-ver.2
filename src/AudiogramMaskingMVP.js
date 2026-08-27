@@ -261,8 +261,7 @@ const PRESET_DETAILS = {
     chiefComplaint: '学校検診で聞こえの悪さを指摘された',
     history: '本人から話を聞くと周囲がうるさくて、検査音が聞こえなかった様子。念の為受信した',
     findings: '鼓膜所見正常',
-    diagnosis: '正常聴力（学校検診での誤検出）',
-    diseaseName: '正常',
+    casePattern: 'normal', // ART等の内部判定用（症例情報UIには出さない）
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: 0, peakCompliance: 1.5, sigma: 60 },
@@ -275,8 +274,7 @@ const PRESET_DETAILS = {
     chiefComplaint: '右耳難聴、耳鳴、めまい感',
     history: '昨日から突然右耳の耳閉塞感と耳鳴、回転性めまい感あり。今日になってめまい感はだいぶ治ったが、聞こえの悪さは変わらないため受診した',
     findings: '鼓膜所見正常',
-    diagnosis: '突発性難聴（右）',
-    diseaseName: '突発性難聴',
+    casePattern: 'sensorineural',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: -10, peakCompliance: 1.5, sigma: 60 },
@@ -289,8 +287,7 @@ const PRESET_DETAILS = {
     chiefComplaint: '左耳の聞こえの悪さ',
     history: '入学時の学校検診で左耳難聴を指摘され、精査のため受診した',
     findings: '鼓膜所見正常',
-    diagnosis: '感音性難聴（左）',
-    diseaseName: '感音性難聴',
+    casePattern: 'sensorineural',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: 0, peakCompliance: 0.8, sigma: 60 },
@@ -303,8 +300,7 @@ const PRESET_DETAILS = {
     chiefComplaint: '耳閉塞感、耳鳴り、めまい',
     history: '20歳の時、右耳突発性難聴。1週間前から回転性めまいあり。良くなったり悪くなったり。左耳ゴーという耳鳴りが気になる',
     findings: '鼓膜所見正常',
-    diagnosis: 'メニエール病（左）',
-    diseaseName: 'メニエール病',
+    casePattern: 'sensorineural',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: -15, peakCompliance: 1.3, sigma: 60 },
@@ -317,8 +313,7 @@ const PRESET_DETAILS = {
     chiefComplaint: '聞こえの悪さ（特に左耳）',
     history: '徐々に聞こえ悪くなった。最近、電話を左で取ると聞こえづらいのがわかった。今は右耳で電話をとっている。いつから聞こえ悪いのかよくわからない',
     findings: '鼓膜所見正常',
-    diagnosis: '感音性難聴（左優位）',
-    diseaseName: '感音性難聴',
+    casePattern: 'sensorineural',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: -10, peakCompliance: 1.2, sigma: 60 },
@@ -331,8 +326,7 @@ const PRESET_DETAILS = {
     chiefComplaint: 'TVの音が聞こえにくい',
     history: 'ご主人から聞こえの悪さを指摘される。TVの音が大きいと言われる。そう言われたらそうかなと。ご主人が補聴器を勧めてきたので、仕方なく受診した',
     findings: '鼓膜所見正常',
-    diagnosis: '加齢性難聴（両側）',
-    diseaseName: '加齢性難聴',
+    casePattern: 'sensorineural',
     tympanogram: { 
       type: 'A', 
       left: { peakPressure: 5, peakCompliance: 1.1, sigma: 60 },
@@ -345,8 +339,7 @@ const PRESET_DETAILS = {
     chiefComplaint: '鼻水が出る。聞こえの悪さ',
     history: '小さい頃から滲出性中耳炎を繰り返す',
     findings: '鼓膜所見：色が悪い・陥没あり',
-    diagnosis: '滲出性中耳炎（両側）',
-    diseaseName: '滲出性中耳炎',
+    casePattern: 'conductive',
     tympanogram: { 
       type: 'B', 
       left: { peakPressure: 100, peakCompliance: 0.2, sigma: 80 },
@@ -359,8 +352,7 @@ const PRESET_DETAILS = {
     chiefComplaint: '耳痛、聞こえの悪さ、耳閉塞感',
     history: '2日前より耳痛と耳閉塞感あり',
     findings: '鼓膜所見炎症（＋）',
-    diagnosis: '急性中耳炎（右）',
-    diseaseName: '急性中耳炎',
+    casePattern: 'conductive',
     tympanogram: { 
       type: 'MIX',
       left: { peakPressure: 0, peakCompliance: 1.2, sigma: 60 },
@@ -1063,8 +1055,8 @@ Object.keys(PRESET_DETAILS).forEach(caseId => {
   const details = PRESET_DETAILS[caseId];
   const tympanogram = details.tympanogram;
   if (preset && tympanogram) {
-    const casePattern = inferCasePatternFromDisorderName(details.diseaseName);
-    details.artConfig = buildArtConfig(preset.targets, tympanogram, details.diseaseName || null, casePattern);
+    const casePattern = details.casePattern || 'sensorineural';
+    details.artConfig = buildArtConfig(preset.targets, tympanogram, null, casePattern);
     details.dpoaeConfig = buildDPOAEConfig(preset.targets, tympanogram);
   }
 });
@@ -5352,22 +5344,6 @@ ${targets.map((target, index) => {
                   <h4 className="text-sm font-semibold text-purple-800 mb-2">鼓膜所見</h4>
                   <p className="text-sm text-gray-700">{currentCaseInfo.findings || currentCaseInfo.otoscopy || '記載なし'}</p>
                 </div>
-
-                {/* 診断情報（ある場合） */}
-                {currentCaseInfo.diagnosis && (
-                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                    <h4 className="text-sm font-semibold text-red-800 mb-2">診断</h4>
-                    <p className="text-sm text-gray-700 font-medium">{currentCaseInfo.diagnosis}</p>
-                  </div>
-                )}
-
-                {/* 疾患名（ある場合） */}
-                {currentCaseInfo.diseaseName && (
-                  <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
-                    <h4 className="text-sm font-semibold text-indigo-800 mb-2">推定疾患</h4>
-                    <p className="text-sm text-gray-700 font-medium">{currentCaseInfo.diseaseName}</p>
-                  </div>
-                )}
 
                 {/* 学習ポイント（OpenAI生成の場合のみ表示） */}
                 {currentCaseInfo.explanation && (
