@@ -4930,11 +4930,11 @@ ${targets.map((target, index) => {
   // 学生IDログイン画面
   if (!isAuthenticated) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center bg-black text-white">
-        <div className="bg-neutral-900 rounded-2xl shadow-lg p-8 max-w-md w-full mx-4 border border-neutral-700">
+      <div className="w-full min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full mx-4">
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-white mb-2">Audioscope EDU - オーディオグラム演習</h1>
-            <p className="text-neutral-300">学生IDを入力してログインしてください</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Audioscope EDU - オーディオグラム演習</h1>
+            <p className="text-gray-600">学生IDを入力してログインしてください</p>
           </div>
           <div className="space-y-4">
             <div>
@@ -4975,7 +4975,7 @@ ${targets.map((target, index) => {
     );
   }
   return (
-    <div className="w-full min-h-screen p-6 md:p-10 bg-black text-white" ref={containerRef}>
+    <div className="w-full min-h-screen p-6 md:p-10 bg-gray-50 text-gray-900" ref={containerRef}>
       <div className="max-w-7xl mx-auto grid gap-6">
         <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div>
