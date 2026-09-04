@@ -590,7 +590,8 @@ export function generateAudiogram(opts = {}) {
   if (severityWasRandom && isUnilateralProfile && profile.startsWith('SNHL_') && severity === 0) {
     severity = 1;
   }
-  // ムンプス: 教育上「軽度」は用いず、乱択時は中等度以上へ（明示指定の severity=1 も高度寄り深度で生成）
+  // ムンプス: 学習者向けの無作為選択では軽度を選ばない（乱択時 severity=1→2）。
+  // 検証グリッドでは程度1も明示指定で生成するが、深度テーブル上は中等度相当とし高度床を満たす。
   if (severityWasRandom && profile === 'SNHL_Mumps' && severity === 1) {
     severity = 2;
   }

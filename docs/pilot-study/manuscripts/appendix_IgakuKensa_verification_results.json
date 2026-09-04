@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T13:53:04.513Z",
+  "generatedAt": "2026-09-04T14:18:50.939Z",
   "unitNote": "適合率は原則「症例（合成閾値セット）単位」。G2b・G4bのみ閾値点単位。",
   "grid": {
     "profiles": 10,
@@ -96,6 +96,33 @@
       "max": 65,
       "mean": 25.069444444444443
     },
+    "noiseDepthVs2k": {
+      "n": 720,
+      "min": 10,
+      "q25": 20,
+      "median": 25,
+      "q75": 30,
+      "max": 65,
+      "mean": 25.069444444444443
+    },
+    "noiseDepthVs8k": {
+      "n": 720,
+      "min": 10,
+      "q25": 10,
+      "median": 15,
+      "q75": 20,
+      "max": 45,
+      "mean": 16.40277777777778
+    },
+    "noiseDepthMinBoth": {
+      "n": 720,
+      "min": 10,
+      "q25": 10,
+      "median": 15,
+      "q75": 20,
+      "max": 35,
+      "mean": 15.652777777777779
+    },
     "carhartDepth": {
       "n": 576,
       "min": 5,
@@ -159,6 +186,33 @@
       "max": 108.33333333333333,
       "mean": 96.04166666666649
     },
+    "unilateralMumpsSev1": {
+      "n": 240,
+      "min": 80,
+      "q25": 85,
+      "median": 89.16666666666667,
+      "q75": 106.66666666666667,
+      "max": 108.33333333333333,
+      "mean": 94.21527777777769
+    },
+    "unilateralMumpsSev2": {
+      "n": 240,
+      "min": 78.33333333333334,
+      "q25": 85,
+      "median": 90,
+      "q75": 106.66666666666667,
+      "max": 108.33333333333333,
+      "mean": 94.59722222222203
+    },
+    "unilateralMumpsSev3": {
+      "n": 240,
+      "min": 88.33333333333333,
+      "q25": 95,
+      "median": 96.66666666666667,
+      "q75": 105,
+      "max": 108.33333333333333,
+      "mean": 99.31249999999973
+    },
     "suddenSo": {
       "none": 555,
       "hf": 139,
@@ -181,6 +235,24 @@
         }
       }
     },
+    "floorWithoutSo": {
+      "suddenLatNoFullSo": {
+        "ok": 694,
+        "n": 694
+      },
+      "suddenLatSev3NoFullSo": {
+        "ok": 214,
+        "n": 214
+      },
+      "mumpsFloorNoFullSo": {
+        "ok": 366,
+        "n": 366
+      },
+      "mumpsFloorNoMeanSo": {
+        "ok": 366,
+        "n": 366
+      }
+    },
     "mumpsFullSoRate": {
       "n": 720,
       "full": 354,
@@ -200,7 +272,8 @@
       "ok": 9600,
       "n": 9600,
       "rate": 100,
-      "note": "10プロファイル(正常1+疾患9)×6年齢×2性別×4程度×20seed"
+      "note": "10プロファイル(正常1+疾患9)×6年齢×2性別×4程度×20seed",
+      "descriptive": false
     },
     {
       "id": "G1",
@@ -208,7 +281,8 @@
       "ok": 9600,
       "n": 9600,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "G2a",
@@ -216,7 +290,8 @@
       "ok": 9600,
       "n": 9600,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "G2b",
@@ -224,7 +299,8 @@
       "ok": 230400,
       "n": 230400,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "G4a",
@@ -232,7 +308,8 @@
       "ok": 9600,
       "n": 9600,
       "rate": 100,
-      "note": "境界値＝上下限一致は適合。超過・下回は不適合"
+      "note": "境界値＝上下限一致は適合。超過・下回は不適合",
+      "descriptive": false
     },
     {
       "id": "G4b",
@@ -240,7 +317,8 @@
       "ok": 230400,
       "n": 230400,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "G3-Normal",
@@ -248,7 +326,8 @@
       "ok": 960,
       "n": 960,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "G3-SNHL",
@@ -256,7 +335,8 @@
       "ok": 4800,
       "n": 4800,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "G3-CHL",
@@ -264,7 +344,8 @@
       "ok": 3840,
       "n": 3840,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "G3-Noise",
@@ -272,7 +353,8 @@
       "ok": 720,
       "n": 720,
       "rate": 100,
-      "note": "Coles参考の著者設定（10 dB床）"
+      "note": "Coles参考の著者設定（10 dB床）",
+      "descriptive": false
     },
     {
       "id": "G3-SuddenLat",
@@ -280,7 +362,8 @@
       "ok": 720,
       "n": 720,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "G3-MumpsFloor",
@@ -288,7 +371,8 @@
       "ok": 720,
       "n": 720,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "G3-CarhartGeom",
@@ -296,7 +380,8 @@
       "ok": 576,
       "n": 576,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "G3-AOM-Mixed",
@@ -304,7 +389,8 @@
       "ok": 361,
       "n": 361,
       "rate": 100,
-      "note": ""
+      "note": "",
+      "descriptive": false
     },
     {
       "id": "T1",
@@ -312,7 +398,8 @@
       "ok": 200,
       "n": 200,
       "rate": 100,
-      "note": "差の中央値 42.5 dB (IQR 37.5–47.5)"
+      "note": "差の中央値 42.5 dB (IQR 37.5–47.5)",
+      "descriptive": false
     },
     {
       "id": "T8",
@@ -320,7 +407,8 @@
       "ok": 540,
       "n": 540,
       "rate": 100,
-      "note": "SNHL_Age:60/60; SNHL_NoiseNotch:60/60; SNHL_Meniere:60/60; SNHL_Sudden:60/60; SNHL_Mumps:60/60; CHL_OME:60/60; CHL_AOM:60/60; CHL_Otosclerosis:60/60; CHL_OssicularDiscontinuity:60/60"
+      "note": "SNHL_Age:60/60; SNHL_NoiseNotch:60/60; SNHL_Meniere:60/60; SNHL_Sudden:60/60; SNHL_Mumps:60/60; CHL_OME:60/60; CHL_AOM:60/60; CHL_Otosclerosis:60/60; CHL_OssicularDiscontinuity:60/60",
+      "descriptive": false
     },
     {
       "id": "T7",
@@ -328,7 +416,8 @@
       "ok": 200,
       "n": 200,
       "rate": 100,
-      "note": "焦点差中央値 51.7 dB（グリッドの程度≥1規則と同じ30 dB床）"
+      "note": "焦点差中央値 51.7 dB（グリッドの程度≥1規則と同じ30 dB床）",
+      "descriptive": false
     },
     {
       "id": "T6a",
@@ -336,7 +425,8 @@
       "ok": 160,
       "n": 200,
       "rate": 80,
-      "note": "同じ200件での付与 160/200=80.0% (95%CI 73.9–85.0%)。許容帯70–90%のため試験合格"
+      "note": "同じ200件での付与 160/200=80.0% (95%CI 73.9–85.0%)。許容帯70–90%は凍結正解表で事前設定。95%CIはWilson法。帯内のため試験合格",
+      "descriptive": false
     },
     {
       "id": "T6b",
@@ -344,7 +434,8 @@
       "ok": 160,
       "n": 160,
       "rate": 100,
-      "note": "T6aで付与された160件の形（160/160）"
+      "note": "T6aで付与された160件の形（160/160）",
+      "descriptive": false
     },
     {
       "id": "T6c",
@@ -352,7 +443,8 @@
       "ok": 101,
       "n": 200,
       "rate": 50.5,
-      "note": "同じ200件での付与 101/200=50.5% (95%CI 43.6–57.4%)。許容帯40–60%のため試験合格。臨床発生率ではない"
+      "note": "同じ200件での付与 101/200=50.5% (95%CI 43.6–57.4%)。許容帯40–60%は凍結正解表で事前設定。95%CIはWilson法。帯内のため試験合格。臨床発生率ではない",
+      "descriptive": false
     },
     {
       "id": "T6d",
@@ -360,7 +452,8 @@
       "ok": 101,
       "n": 101,
       "rate": 100,
-      "note": "T6cで付与された101件の形（101/101）"
+      "note": "T6cで付与された101件の形（101/101）",
+      "descriptive": false
     },
     {
       "id": "T10",
@@ -368,15 +461,17 @@
       "ok": 200,
       "n": 200,
       "rate": 100,
-      "note": "不一致 0"
+      "note": "不一致 0",
+      "descriptive": false
     },
     {
       "id": "T11",
-      "label": "同一条件・異seedの出力多様性（記述・全件不一致は非要求）",
-      "ok": 200,
-      "n": 200,
-      "rate": 100,
-      "note": "SNHL_NoiseNotch:ユニーク200/200・隣接不一致199/199; CHL_OME:ユニーク200/200・隣接不一致199/199; Normal:ユニーク200/200・隣接不一致199/199"
+      "label": "同一条件・異seedの出力多様性（記述・合否基準なし）",
+      "ok": null,
+      "n": null,
+      "rate": null,
+      "note": "3条件各200件。全件不一致は非要求（5 dB丸め）。SNHL_NoiseNotch:ユニーク200/200・隣接不一致199/199; CHL_OME:ユニーク200/200・隣接不一致199/199; Normal:ユニーク200/200・隣接不一致199/199",
+      "descriptive": true
     }
   ],
   "runtime": {

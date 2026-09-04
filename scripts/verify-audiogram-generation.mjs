@@ -109,10 +109,25 @@ function seedFor(profile, ageGroup, sex, severity, s) {
 }
 
 const results = [];
-function add(id, label, ok, n, note = '') {
-  const rate = n ? Math.round((1000 * ok) / n) / 10 : 0;
-  results.push({ id, label, ok, n, rate, note });
-  console.log(`${id} ${label}: ${ok}/${n} (${rate}%) ${note}`);
+function add(id, label, ok, n, note = '', opts = {}) {
+  const descriptive = Boolean(opts.descriptive);
+  const rate = descriptive || n == null ? null : (n ? Math.round((1000 * ok) / n) / 10 : 0);
+  results.push({ id, label, ok, n, rate, note, descriptive });
+  if (descriptive) console.log(`${id} ${label}: —（記述） ${note}`);
+  else console.log(`${id} ${label}: ${ok}/${n} (${rate}%) ${note}`);
+}
+
+function isFullAcSo(caseData) {
+  const { diseased } = diseasedEar(caseData);
+  const acFreqs = ['0.125kHz', '0.25kHz', '0.5kHz', '1kHz', '2kHz', '4kHz', '8kHz'];
+  return acFreqs.every((f) => diseased.find((r) => r.freq === f)?.soAC);
+}
+
+function meanBandHasSo(caseData) {
+  const { diseased, contra } = diseasedEar(caseData);
+  const freqs = ['0.5kHz', '1kHz', '2kHz'];
+  return freqs.some((f) => diseased.find((r) => r.freq === f)?.soAC)
+    || freqs.some((f) => contra.find((r) => r.freq === f)?.soAC);
 }
 
 // ---------- 要因組合せグリッド（適用対象別） ----------
@@ -152,13 +167,25 @@ const counters = {
   unilateralSudden: [],
   unilateralSuddenBySev: { 1: [], 2: [], 3: [] },
   unilateralMumps: [],
+  unilateralMumpsBySev: { 1: [], 2: [], 3: [] },
   suddenLatN: 0,
   suddenLatOk: 0,
+  suddenLatNoFullSoN: 0,
+  suddenLatNoFullSoOk: 0,
+  suddenLatSev3NoFullSoN: 0,
+  suddenLatSev3NoFullSoOk: 0,
   mumpsFloorN: 0,
   mumpsFloorOk: 0,
+  mumpsFloorNoFullSoN: 0,
+  mumpsFloorNoFullSoOk: 0,
+  mumpsFloorNoMeanSoN: 0,
+  mumpsFloorNoMeanSoOk: 0,
   suddenSo: { none: 0, hf: 0, full: 0, bySev: { 1: { none: 0, hf: 0, full: 0 }, 2: { none: 0, hf: 0, full: 0 }, 3: { none: 0, hf: 0, full: 0 } } },
   mumpsFullSo: 0,
   mumpsN: 0,
+  noiseDepths2: [],
+  noiseDepths8: [],
+  noiseDepthsMin: [],
 };
 
 for (const profile of PROFILES) {
@@ -226,11 +253,29 @@ for (const profile of PROFILES) {
           }
           if (profile === 'SNHL_Sudden' && severity >= 1) {
             counters.suddenLatN += 1;
-            if (checkSuddenLaterality(c, SUDDEN_MIN_LATERALITY_DB)) counters.suddenLatOk += 1;
+            const latOk = checkSuddenLaterality(c, SUDDEN_MIN_LATERALITY_DB);
+            if (latOk) counters.suddenLatOk += 1;
+            if (!isFullAcSo(c)) {
+              counters.suddenLatNoFullSoN += 1;
+              if (latOk) counters.suddenLatNoFullSoOk += 1;
+              if (severity === 3) {
+                counters.suddenLatSev3NoFullSoN += 1;
+                if (latOk) counters.suddenLatSev3NoFullSoOk += 1;
+              }
+            }
           }
           if (profile === 'SNHL_Mumps' && severity >= 1) {
             counters.mumpsFloorN += 1;
-            if (checkMumpsSeverityFloor(c)) counters.mumpsFloorOk += 1;
+            const floorOk = checkMumpsSeverityFloor(c);
+            if (floorOk) counters.mumpsFloorOk += 1;
+            if (!isFullAcSo(c)) {
+              counters.mumpsFloorNoFullSoN += 1;
+              if (floorOk) counters.mumpsFloorNoFullSoOk += 1;
+            }
+            if (!meanBandHasSo(c)) {
+              counters.mumpsFloorNoMeanSoN += 1;
+              if (floorOk) counters.mumpsFloorNoMeanSoOk += 1;
+            }
           }
           if (profile === 'CHL_AOM' && severity >= 1) {
             counters.aomSevN += 1;
@@ -246,8 +291,16 @@ for (const profile of PROFILES) {
             const rows = earRows(c, 'right');
             const ac2 = rows.find((r) => r.freq === '2kHz')?.ac;
             const ac4 = rows.find((r) => r.freq === '4kHz')?.ac;
+            const ac8 = rows.find((r) => r.freq === '8kHz')?.ac;
             if (typeof ac2 === 'number' && typeof ac4 === 'number') {
-              counters.noiseDepths.push(ac4 - ac2);
+              const d2 = ac4 - ac2;
+              counters.noiseDepths.push(d2);
+              counters.noiseDepths2.push(d2);
+              if (typeof ac8 === 'number') {
+                const d8 = ac4 - ac8;
+                counters.noiseDepths8.push(d8);
+                counters.noiseDepthsMin.push(Math.min(d2, d8));
+              }
             }
           }
           if (profile === 'CHL_Otosclerosis' && severity >= 1 && c.meta.carhartApplied) {
@@ -272,7 +325,10 @@ for (const profile of PROFILES) {
                 counters.unilateralSudden.push(diff);
                 if (severity >= 1 && severity <= 3) counters.unilateralSuddenBySev[severity].push(diff);
               }
-              if (profile === 'SNHL_Mumps') counters.unilateralMumps.push(diff);
+              if (profile === 'SNHL_Mumps') {
+                counters.unilateralMumps.push(diff);
+                if (severity >= 1 && severity <= 3) counters.unilateralMumpsBySev[severity].push(diff);
+              }
             }
           }
           if (profile === 'SNHL_Sudden' && severity >= 1) {
@@ -433,7 +489,7 @@ add('G3-AOM-Mixed', 'AOM混合型: 4k BC>0.5k BC（付与例）', counters.aomMi
   const inBand = expressed / N >= CARHART_RATE_LO && expressed / N <= CARHART_RATE_HI;
   add('T6a', `Carhart様・付与の有無（期待${CARHART_EXPRESSION_PROB * 100}%）`,
     expressed, N,
-    `同じ200件での付与 ${expressed}/${N}=${(100 * expressed / N).toFixed(1)}% (95%CI ${(100 * lo).toFixed(1)}–${(100 * hi).toFixed(1)}%)。許容帯70–90%${inBand ? 'のため試験合格' : 'から逸脱'}`);
+    `同じ200件での付与 ${expressed}/${N}=${(100 * expressed / N).toFixed(1)}% (95%CI ${(100 * lo).toFixed(1)}–${(100 * hi).toFixed(1)}%)。許容帯70–90%は凍結正解表で事前設定。95%CIはWilson法。${inBand ? '帯内のため試験合格' : '帯から逸脱'}`);
   add('T6b', 'Carhart様・付与例の形（T6aと同じ200件）', geomOk, expressed,
     `T6aで付与された${expressed}件の形（${geomOk}/${expressed}）`);
 }
@@ -454,7 +510,7 @@ add('G3-AOM-Mixed', 'AOM混合型: 4k BC>0.5k BC（付与例）', counters.aomMi
   const inBand = mixed / N >= AOM_MIXED_RATE_LO && mixed / N <= AOM_MIXED_RATE_HI;
   add('T6c', `AOM混合型・付与の有無（教育用${AOM_MIXED_PROB * 100}%）`,
     mixed, N,
-    `同じ200件での付与 ${mixed}/${N}=${(100 * mixed / N).toFixed(1)}% (95%CI ${(100 * lo).toFixed(1)}–${(100 * hi).toFixed(1)}%)。許容帯40–60%${inBand ? 'のため試験合格' : 'から逸脱'}。臨床発生率ではない`);
+    `同じ200件での付与 ${mixed}/${N}=${(100 * mixed / N).toFixed(1)}% (95%CI ${(100 * lo).toFixed(1)}–${(100 * hi).toFixed(1)}%)。許容帯40–60%は凍結正解表で事前設定。95%CIはWilson法。${inBand ? '帯内のため試験合格' : '帯から逸脱'}。臨床発生率ではない`);
   add('T6d', 'AOM混合型・付与例の形（T6cと同じ200件）', geomOk, mixed,
     `T6cで付与された${mixed}件の形（${geomOk}/${mixed}）`);
 }
@@ -495,7 +551,8 @@ add('G3-AOM-Mixed', 'AOM混合型: 4k BC>0.5k BC（付与例）', counters.aomMi
     }
     notes.push(`${cond.profile}:ユニーク${fps.size}/${FOCUS_N}・隣接不一致${adjDiff}/${FOCUS_N - 1}`);
   }
-  add('T11', '同一条件・異seedの出力多様性（記述・全件不一致は非要求）', FOCUS_N, FOCUS_N, notes.join('; '));
+  add('T11', '同一条件・異seedの出力多様性（記述・合否基準なし）', null, null,
+    `3条件各200件。全件不一致は非要求（5 dB丸め）。${notes.join('; ')}`, { descriptive: true });
 }
 
 const descriptive = {
@@ -504,6 +561,9 @@ const descriptive = {
     Object.entries(counters.abgByPattern).map(([k, arr]) => [k, quantiles(arr)]),
   ),
   noiseDepth: quantiles(counters.noiseDepths),
+  noiseDepthVs2k: quantiles(counters.noiseDepths2),
+  noiseDepthVs8k: quantiles(counters.noiseDepths8),
+  noiseDepthMinBoth: quantiles(counters.noiseDepthsMin),
   carhartDepth: quantiles(counters.carhartDepths),
   unilateralDiff: quantiles(counters.unilateralDiffs),
   unilateralSudden: quantiles(counters.unilateralSudden),
@@ -511,7 +571,16 @@ const descriptive = {
   unilateralSuddenSev2: quantiles(counters.unilateralSuddenBySev[2]),
   unilateralSuddenSev3: quantiles(counters.unilateralSuddenBySev[3]),
   unilateralMumps: quantiles(counters.unilateralMumps),
+  unilateralMumpsSev1: quantiles(counters.unilateralMumpsBySev[1]),
+  unilateralMumpsSev2: quantiles(counters.unilateralMumpsBySev[2]),
+  unilateralMumpsSev3: quantiles(counters.unilateralMumpsBySev[3]),
   suddenSo: counters.suddenSo,
+  floorWithoutSo: {
+    suddenLatNoFullSo: { ok: counters.suddenLatNoFullSoOk, n: counters.suddenLatNoFullSoN },
+    suddenLatSev3NoFullSo: { ok: counters.suddenLatSev3NoFullSoOk, n: counters.suddenLatSev3NoFullSoN },
+    mumpsFloorNoFullSo: { ok: counters.mumpsFloorNoFullSoOk, n: counters.mumpsFloorNoFullSoN },
+    mumpsFloorNoMeanSo: { ok: counters.mumpsFloorNoMeanSoOk, n: counters.mumpsFloorNoMeanSoN },
+  },
   mumpsFullSoRate: counters.mumpsN
     ? { n: counters.mumpsN, full: counters.mumpsFullSo, rate: counters.mumpsFullSo / counters.mumpsN }
     : null,
@@ -549,7 +618,7 @@ const summary = {
     packageVersion: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version,
   },
   overallPass: results.every((r) => {
-    if (r.id === 'T6a' || r.id === 'T6c' || r.id === 'T11') return true;
+    if (r.descriptive || r.id === 'T6a' || r.id === 'T6c' || r.id === 'T11') return true;
     if (r.id.startsWith('G') || r.id.startsWith('T')) return r.ok === r.n || r.rate >= 99.5;
     return true;
   }),
@@ -576,7 +645,10 @@ const md = [
   '',
   '| ID | 項目 | 適合 | 適用n | 率% | メモ |',
   '|----|------|------|-------|-----|------|',
-  ...results.map((r) => `| ${r.id} | ${r.label} | ${r.ok}/${r.n} | ${r.n} | ${r.rate} | ${r.note} |`),
+  ...results.map((r) => {
+    if (r.descriptive) return `| ${r.id} | ${r.label} | — | — | — | ${r.note} |`;
+    return `| ${r.id} | ${r.label} | ${r.ok}/${r.n} | ${r.n} | ${r.rate} | ${r.note} |`;
+  }),
   '',
   '## 記述統計（グリッド由来）',
   '',
@@ -586,7 +658,9 @@ const md = [
   `- 伝音ABG 急性中耳炎・混合型: ${fmtQ(descriptive.chlAbgByPattern.CHL_AOM_mixed)}`,
   `- 伝音ABG 耳硬化症: ${fmtQ(descriptive.chlAbgByPattern.CHL_Otosclerosis)}`,
   `- 伝音ABG 耳小骨連鎖離断パターン: ${fmtQ(descriptive.chlAbgByPattern.CHL_OssicularDiscontinuity)}`,
-  `- C5-dipの深さ（4k−2k AC, 程度≥1）: ${fmtQ(descriptive.noiseDepth)}`,
+  `- C5-dipの深さ（4k−2k AC, 程度≥1）: ${fmtQ(descriptive.noiseDepthVs2k)}`,
+  `- C5-dipの深さ（4k−8k AC, 程度≥1）: ${fmtQ(descriptive.noiseDepthVs8k)}`,
+  `- C5-dipの深さ（min(4k−2k,4k−8k), 程度≥1）: ${fmtQ(descriptive.noiseDepthMinBoth)}`,
   `- AOM混合型（程度≥1）: ${descriptive.aomMixed.mixed}/${descriptive.aomMixed.nSevGe1} (${((descriptive.aomMixed.rate || 0) * 100).toFixed(1)}%)。付与例の4k BC>0.5k BCは ${descriptive.aomMixed.geomOk}/${descriptive.aomMixed.mixed}`,
   `- Carhart様の深さ（BC2−mean(BC1,BC4), 発現例）: ${fmtQ(descriptive.carhartDepth)}`,
   `- 一側差 Sudden（程度≥1 全体）: ${fmtQ(descriptive.unilateralSudden)}`,
@@ -594,24 +668,30 @@ const md = [
   `- 一側差 Sudden 程度2: ${fmtQ(descriptive.unilateralSuddenSev2)}`,
   `- 一側差 Sudden 程度3: ${fmtQ(descriptive.unilateralSuddenSev3)}`,
   `- 一側差 Mumps（程度≥1）: ${fmtQ(descriptive.unilateralMumps)}`,
-  `- Sudden SO（程度≥1）: none ${counters.suddenSo.none}, hf ${counters.suddenSo.hf}, full ${counters.suddenSo.full}`
-    + ` / 程度別 sev1=${JSON.stringify(counters.suddenSo.bySev[1])}`
-    + ` sev2=${JSON.stringify(counters.suddenSo.bySev[2])}`
-    + ` sev3=${JSON.stringify(counters.suddenSo.bySev[3])}`,
+  `- 一側差 Mumps 程度1: ${fmtQ(descriptive.unilateralMumpsSev1)}`,
+  `- 一側差 Mumps 程度2: ${fmtQ(descriptive.unilateralMumpsSev2)}`,
+  `- 一側差 Mumps 程度3: ${fmtQ(descriptive.unilateralMumpsSev3)}`,
+  `- Sudden SO（程度≥1）: なし${counters.suddenSo.none}件、高音域のみ${counters.suddenSo.hf}件、全周${counters.suddenSo.full}件`
+    + `／程度1: なし${counters.suddenSo.bySev[1].none}・高音${counters.suddenSo.bySev[1].hf}・全周${counters.suddenSo.bySev[1].full}`
+    + `／程度2: なし${counters.suddenSo.bySev[2].none}・高音${counters.suddenSo.bySev[2].hf}・全周${counters.suddenSo.bySev[2].full}`
+    + `／程度3: なし${counters.suddenSo.bySev[3].none}・高音${counters.suddenSo.bySev[3].hf}・全周${counters.suddenSo.bySev[3].full}`,
   `- Mumps 全周SO（程度≥1）: ${counters.mumpsFullSo}/${counters.mumpsN}`
     + (counters.mumpsN ? ` (${(100 * counters.mumpsFullSo / counters.mumpsN).toFixed(1)}%)` : ''),
+  `- 床規則（全周SO除外）: 突発一側差 ${counters.suddenLatNoFullSoOk}/${counters.suddenLatNoFullSoN}`
+    + `、突発程度3 ${counters.suddenLatSev3NoFullSoOk}/${counters.suddenLatSev3NoFullSoN}`
+    + `、ムンプス ${counters.mumpsFloorNoFullSoOk}/${counters.mumpsFloorNoFullSoN}`
+    + `、ムンプス（0.5/1/2 kHzにSOなし） ${counters.mumpsFloorNoMeanSoOk}/${counters.mumpsFloorNoMeanSoN}`,
   `- 注: T7焦点は程度2・固定条件の200件。グリッドの程度≥1（720件）と同じ30 dB一側差床。SO点の数値処理は電子付録の指標定義を参照。`,
-  `- Carhart様: Bernoulli（rand()<0.8）。決定論的80%割付ではない。グリッド発現 ${counters.carhartExprN}/720、T6a観測160/200。`,
+  `- Carhart様: seed付き一様乱数のBernoulli試行（発現確率80%）。決定論的80%割付ではない。グリッド発現 ${counters.carhartExprN}/720。許容帯は凍結正解表で事前設定、95%CIはWilson法。`,
   `- T8内訳: 正常以外9プロファイル × 6年齢 × 2性別 × 5 seed = 540セル`,
-  `- T6a/T6b: 同じ200件。T6aは付与の有無（160/200）、T6bはその付与例の形（160/160）。`,
-  `- T6c/T6d: 同じ200件。T6cは付与の有無（101/200）、T6dはその付与例の形（101/101）。`,
-  `- T11: 同一条件でseedのみ変えた200件のユニーク出力数（5 dB丸めのため全件不一致は要求しない）。`,
+  `- T6a/T6b・T6c/T6d: それぞれ同じ200件での付与の有無とその形。`,
+  `- T11: 記述のみ（合否基準なし）。`,
   '',
   '## 指標定義（SOの数値処理）',
   '',
-  '- スケールアウト（SO）点は、当該周波数の教育用気導上限値（LIMITS_AC.max）を数値として保持し、`soAC=true`（骨導SO時は周波数別NR閾値と`soBC=true`）を付す。上限＋5 dB等の外挿代入は行わない。',
+  '- スケールアウト（SO）点は、当該周波数の教育用気導上限値を数値として保持し、SOフラグを付す。上限＋5 dB等の外挿代入は行わない。',
   '- 一側差・病側平均（0.5/1/2 kHz）の算出では、上記の数値（上限値）を含め、3周波がすべて有限である場合のみ平均する。いずれかが非数なら当該例は判定不能（主合否では不適合扱い）。',
-  '- したがって G3-SuddenLat / G3-MumpsFloor の分母720は、SO例を除外せず、SO点を上限値代入したうえで床規則を評価した結果である。',,
+  '- G3-SuddenLat / G3-MumpsFloor の分母720は、SO例を除外せず、SO点を上限値代入したうえで床規則を評価した結果である。全周SOを除いた適合率は記述統計に別掲する。',
   '',
   `実行: Node ${summary.runtime.node} / ${summary.runtime.platform} / ${summary.runtime.packageName}@${summary.runtime.packageVersion}`,
   '',].join('\n');

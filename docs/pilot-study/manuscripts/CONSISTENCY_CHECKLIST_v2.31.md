@@ -45,3 +45,16 @@
 - 付録md/json: `manuscripts/appendix_IgakuKensa_verification_results.{md,json}`
 - Supplement: `manuscripts/Supplement1_verification_v2.31.docx`
 - 検証SoT: `verification/IgakuKensa_verification_results.{md,json}`
+
+
+## v2.31追補（査読指摘対応）
+
+- [x] 英文COIを和文と同内容（authors / no patents・licensing・commercial）
+- [x] 付録にISO実装値要約表、T11条件表、異常系B/M表、注記（Amd・18歳未満・第三者でない・規格認証でない・臨床妥当性でない）
+- [x] 付録をWord表化（パイプ段落廃止）、SO等を日本語表記
+- [x] ムンプス「軽度」表現を学習者UI vs 検証グリッドで書き分け、程度別統計を付録・表3へ
+- [x] SO除外の床適合率を別掲
+- [x] T11を記述（合否基準なし）
+- [x] 許容帯は事前設定＋Wilson法
+- [x] C5深さに4k−8kおよびminを併記
+- [x] 生成器・検証器の共有関係を本文・付録に明記
