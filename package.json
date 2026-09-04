@@ -9,7 +9,9 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "build:tymp": "node scripts/build-tymp.js"
+    "build:tymp": "node scripts/build-tymp.js",
+    "verify:audiogram": "node scripts/verify-audiogram-generation.mjs",
+    "verify:audiogram:mutations": "node scripts/verify-audiogram-mutations.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",

@@ -184,6 +184,18 @@ export const CARHART_EXPRESSION_PROB = 0.8;
 export const AOM_MIXED_PROB = 0.5;
 /** 検証・仕様上の Carhart様定義: BC2k − mean(BC1k, BC4k) ≥ 5 dB かつ BC2k が隣接両側より悪い */
 export const CARHART_MIN_DEPTH_DB = 5;
+/**
+ * C5-dip（騒音）の最小深さ（教育用・著者設定）。
+ * Colesらを参考に 4 kHz を中心とし、2 kHz・8 kHz よりそれぞれ ≥10 dB 高くする。
+ * Coles基準そのものの移植ではない。
+ */
+export const NOISE_NOTCH_MIN_DEPTH_DB = 10;
+/** 突発性難聴: 程度≥1で病側−対側 mean AC(0.5/1/2 kHz) の最小差（教育用。軽度も30 dB床） */
+export const SUDDEN_MIN_LATERALITY_DB = 30;
+/** ムンプス難聴: 程度≥1で病側 mean AC(0.5/1/2) の下限（高度〜聾寄りの教育用床） */
+export const MUMPS_MIN_MEAN_AC_DB = 70;
+/** ムンプス難聴: 程度≥1の最小一側差 */
+export const MUMPS_MIN_LATERALITY_DB = 55;
 
 /**
  * 突発性難聴のスケールアウト（教育用・ムンプスと役割分担）
@@ -241,7 +253,7 @@ function applySuddenScaleOut(rows, mode, include2k) {
   });
 }
 
-/** C5-dip: AC(4 kHz) > AC(2 kHz) かつ AC(4 kHz) > AC(8 kHz)（8 kHzでの回復） */
+/** C5-dip: AC(4 kHz) ≥ AC(2 kHz)+10 かつ AC(4 kHz) ≥ AC(8 kHz)+10（教育用・著者設定） */
 function enforceNoiseNotchGeometry(rows) {
   const by = Object.fromEntries(rows.map((r) => [r.freq, r]));
   const r2 = by['2kHz'];
@@ -249,26 +261,27 @@ function enforceNoiseNotchGeometry(rows) {
   const r8 = by['8kHz'];
   if (!r2 || !r4 || typeof r2.ac !== 'number' || typeof r4.ac !== 'number') return rows;
 
+  const need = NOISE_NOTCH_MIN_DEPTH_DB;
   const lim4 = LIMITS_AC['4kHz'];
   let ac4 = r4.ac;
   let ac8 = typeof r8?.ac === 'number' ? r8.ac : null;
 
-  // 4 kHz > 2 kHz
-  if (!(ac4 > r2.ac)) {
-    ac4 = roundTo5(clamp(r2.ac + 5, lim4.min, lim4.max));
+  // 4 kHz ≥ 2 kHz + need
+  if (!(ac4 >= r2.ac + need - 1e-9)) {
+    ac4 = roundTo5(clamp(r2.ac + need, lim4.min, lim4.max));
   }
 
-  // 4 kHz > 8 kHz（回復）。まず 4 kHz を上げ、なお不足なら 8 kHz を下げる
-  if (ac8 != null && !(ac4 > ac8)) {
-    ac4 = Math.max(ac4, roundTo5(clamp(ac8 + 5, lim4.min, lim4.max)));
-    if (!(ac4 > ac8)) {
+  // 4 kHz ≥ 8 kHz + need（回復）。まず 4 kHz を上げ、なお不足なら 8 kHz を下げる
+  if (ac8 != null && !(ac4 >= ac8 + need - 1e-9)) {
+    ac4 = Math.max(ac4, roundTo5(clamp(ac8 + need, lim4.min, lim4.max)));
+    if (!(ac4 >= ac8 + need - 1e-9)) {
       const lim8 = LIMITS_AC['8kHz'];
-      ac8 = roundTo5(clamp(ac4 - 5, lim8.min, lim8.max));
+      ac8 = roundTo5(clamp(ac4 - need, lim8.min, lim8.max));
     }
-    if (!(ac4 > ac8)) {
+    if (!(ac4 >= ac8 + need - 1e-9)) {
       ac4 = lim4.max;
       const lim8 = LIMITS_AC['8kHz'];
-      ac8 = roundTo5(clamp(ac4 - 5, lim8.min, lim8.max));
+      ac8 = roundTo5(clamp(ac4 - need, lim8.min, lim8.max));
     }
   }
 
@@ -286,6 +299,48 @@ function enforceNoiseNotchGeometry(rows) {
     }
     return r;
   });
+}
+
+function meanAcAt(rows, freqs) {
+  const vals = freqs
+    .map((f) => rows.find((r) => r.freq === f)?.ac)
+    .filter((v) => Number.isFinite(v));
+  if (vals.length !== freqs.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+/** 病側の指定周波数平均気導を下限まで底上げ（一側性感音の教育用床） */
+function enforceMinMeanAc(rows, minMean, freqs = ['0.5kHz', '1kHz', '2kHz']) {
+  let out = rows;
+  for (let guard = 0; guard < 8; guard++) {
+    const m = meanAcAt(out, freqs);
+    if (m == null || m >= minMean - 1e-9) return out;
+    const bump = Math.max(5, Math.ceil((minMean - m) / 5) * 5);
+    out = out.map((r) => {
+      if (!freqs.includes(r.freq) || !Number.isFinite(r.ac)) return r;
+      const lim = LIMITS_AC[r.freq];
+      const ac = roundTo5(clamp(r.ac + bump, lim.min, lim.max));
+      let bc = r.bc;
+      if (typeof bc === 'number' && isBCFreq(r.freq)) {
+        const limB = LIMITS_BC[r.freq];
+        bc = roundTo5(clamp(Math.min(bc, ac + 5), limB.min, limB.max));
+      }
+      return { ...r, ac, bc };
+    });
+  }
+  return out;
+}
+
+/** 病側−対側の mean AC 差を下限まで確保（5 dB丸めによる不足を反復で吸収） */
+function enforceMinLaterality(diseased, contra, minDiff, freqs = ['0.5kHz', '1kHz', '2kHz']) {
+  let out = diseased;
+  for (let guard = 0; guard < 8; guard++) {
+    const d = meanAcAt(out, freqs);
+    const n = meanAcAt(contra, freqs);
+    if (d == null || n == null || d - n >= minDiff - 1e-9) return out;
+    out = enforceMinMeanAc(out, n + minDiff, freqs);
+  }
+  return out;
 }
 
 /** AOM混合型: 4 kHz骨導が0.5 kHz骨導より悪く、気導は骨導を下回らない */
@@ -385,10 +440,12 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
       const w = { "0.125kHz": 1.0, "0.25kHz": 1.0, "0.5kHz": 0.8, "1kHz": 0.4, "2kHz": 0.2, "4kHz": 0.1, "8kHz": 0.05 }[r.freq] || 0;
       add = w * depth;
     } else if (profile === 'SNHL_Sudden') {
-      const depth = [0, 25, 45, 65][Math.min(3, Math.max(0, Math.round(severity||0)))];
+      // 軽度も一側差≥30 dB床を後段で保証するため、加算をやや大きめに
+      const depth = [0, 35, 45, 65][Math.min(3, Math.max(0, Math.round(severity||0)))];
       add = depth * (0.7 + 0.3 * rand());
     } else if (profile === 'SNHL_Mumps') {
-      const depth = [0, 40, 65, 85][Math.min(3, Math.max(0, Math.round(severity||0)))];
+      // 軽度は実質使わず高度寄りの床（後段で mean AC≥70・一側差≥55 も拘束）
+      const depth = [0, 70, 85, 95][Math.min(3, Math.max(0, Math.round(severity||0)))];
       add = depth;
     } else if (profile === 'CHL_OME') {
       // OME: 0.5–1k 中心のABG、HFは控えめ（UIデモ準拠）
@@ -405,7 +462,8 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
       const w = { "0.125kHz": 0.5, "0.25kHz": 0.9, "0.5kHz": 1.0, "1kHz": 0.8, "2kHz": 0.4, "4kHz": 0.2, "8kHz": 0.1 }[r.freq] || 0;
       add = w * depth;
     } else if (profile === 'CHL_OssicularDiscontinuity') {
-      const depth = [0, 30, 30, 30][Math.min(3, Math.max(0, Math.round(severity||0)))];
+      // 耳小骨連鎖離断パターン（完全離断の臨床最大ABGを必ずしも再現しない教育用）
+      const depth = [0, 35, 42, 48][Math.min(3, Math.max(0, Math.round(severity||0)))];
       const w = { "0.125kHz": 0.8, "0.25kHz": 1.0, "0.5kHz": 1.0, "1kHz": 0.9, "2kHz": 0.9, "4kHz": 0.7, "8kHz": 0.5 }[r.freq] || 0;
       add = w * depth;
     }
@@ -532,6 +590,12 @@ export function generateAudiogram(opts = {}) {
   if (severityWasRandom && isUnilateralProfile && profile.startsWith('SNHL_') && severity === 0) {
     severity = 1;
   }
+  // ムンプス: 教育上「軽度」は用いず、乱択時は中等度以上へ（明示指定の severity=1 も高度寄り深度で生成）
+  if (severityWasRandom && profile === 'SNHL_Mumps' && severity === 1) {
+    severity = 2;
+  }
+  // ムンプス明示 severity=1 も深度テーブル上は中等度相当（meta.severity は指定値のまま）
+  const transformSeverity = (profile === 'SNHL_Mumps' && severity === 1) ? 2 : severity;
 
   // ステップ3: 性別と年齢グループからISO7029データを参照してオージオグラムのベースを生成
   // これが最初のオージオグラム作成ステップ（年代・性別からISOデータを見て作成）
@@ -553,7 +617,7 @@ export function generateAudiogram(opts = {}) {
   const profileOpts = { carhartApplied, aomMixedApplied };
   
   // ステップ4: プロファイル（疾患パターン）を適用して難聴パターンを追加
-  right = applyProfileTransform(rand, right, profile, severity, seed, sex, ageGroup, profileOpts);
+  right = applyProfileTransform(rand, right, profile, transformSeverity, seed, sex, ageGroup, profileOpts);
 
   let left;
   let affectedSide = null;
@@ -570,7 +634,7 @@ export function generateAudiogram(opts = {}) {
       // 右をNormalにし、左を病側生成
       const normalRight = makeContralateralNormal(rand, sex, ageGroup);
       let diseasedLeft = generateEarBase(rand, sex, ageGroup);
-      diseasedLeft = applyProfileTransform(rand, diseasedLeft, profile, severity, seed, sex, ageGroup, profileOpts);
+      diseasedLeft = applyProfileTransform(rand, diseasedLeft, profile, transformSeverity, seed, sex, ageGroup, profileOpts);
       right = normalRight;
       left = diseasedLeft;
     }
@@ -645,10 +709,33 @@ export function generateAudiogram(opts = {}) {
     }
   }
 
-  // C5-dip: severity≥1 では 4 kHz AC > 2 kHz AC かつ 4 kHz AC > 8 kHz AC を保証
+  // C5-dip: severity≥1 では 4 kHz が 2/8 kHz より各 ≥10 dB 高いことを保証
   if (profile === 'SNHL_NoiseNotch' && severity >= 1) {
     if (baseRightProfile === 'SNHL_NoiseNotch') right = enforceNoiseNotchGeometry(right);
     if (baseLeftProfile === 'SNHL_NoiseNotch') left = enforceNoiseNotchGeometry(left);
+    right = enforceBcRules(right, baseRightProfile);
+    left = enforceBcRules(left, baseLeftProfile);
+  }
+
+  // 突発・ムンプス: 一側差／病側平均の教育用床（SO後・BC拘束前に適用し、その後再拘束）
+  if (isUnilateralProfile && affectedSide && severity >= 1) {
+    const diseasedIsRight = affectedSide === 'R';
+    let diseased = diseasedIsRight ? right : left;
+    const contra = diseasedIsRight ? left : right;
+    if (profile === 'SNHL_Sudden') {
+      // 先に一側差≥30。続けて程度別の絶対床で 0→1→2→3 の非減少を担保
+      diseased = enforceMinLaterality(diseased, contra, SUDDEN_MIN_LATERALITY_DB);
+      const suddenAbsFloor = [0, 40, 55, 75][Math.min(3, Math.max(0, severity))];
+      diseased = enforceMinMeanAc(diseased, suddenAbsFloor);
+    }
+    if (profile === 'SNHL_Mumps') {
+      diseased = enforceMinMeanAc(diseased, MUMPS_MIN_MEAN_AC_DB);
+      diseased = enforceMinLaterality(diseased, contra, MUMPS_MIN_LATERALITY_DB);
+      const mumpsAbsFloor = [0, 70, 85, 95][Math.min(3, Math.max(0, transformSeverity))];
+      diseased = enforceMinMeanAc(diseased, mumpsAbsFloor);
+    }
+    if (diseasedIsRight) right = diseased;
+    else left = diseased;
     right = enforceBcRules(right, baseRightProfile);
     left = enforceBcRules(left, baseLeftProfile);
   }
@@ -776,8 +863,8 @@ function enforceBcRules(rows, earProfile) {
     let bc = roundTo5(clamp(r.bc, lim.min, lim.max));
     let ac = r.ac;
     if (typeof ac === 'number') {
-      // ABGは最大40dBまで（伝音性）
-      const maxGap = 40;
+      // ABG上限（伝音性）。耳小骨離断は教育上やや大きめの上限を許容
+      const maxGap = earProfile === 'CHL_OssicularDiscontinuity' ? 50 : 40;
       if (isConductive && ac - bc > maxGap) {
         const adjustedAc = clamp(bc + maxGap, LIMITS_AC[r.freq].min, LIMITS_AC[r.freq].max);
         ac = roundTo5(adjustedAc);
@@ -802,8 +889,8 @@ function enforceBcRules(rows, earProfile) {
       }
     }
     if (typeof ac === 'number') {
-      // ABGは最大40dBまで
-      const maxGap = 40;
+      // ABG上限（上と同じ）
+      const maxGap = earProfile === 'CHL_OssicularDiscontinuity' ? 50 : 40;
       if (ac - bc > maxGap) {
         const adjustedAc = clamp(bc + maxGap, LIMITS_AC[r.freq].min, LIMITS_AC[r.freq].max);
         ac = roundTo5(adjustedAc);

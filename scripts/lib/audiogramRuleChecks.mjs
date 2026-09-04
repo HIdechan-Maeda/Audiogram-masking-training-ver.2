@@ -13,8 +13,31 @@ export const MIN_ABG = {
   },
 };
 
+/** 教育用周波数別上下限（RULE_SPEC P4 / 生成器 LIMITS と同値。検証側に独立定義） */
+export const LIMITS_AC = {
+  '0.125kHz': { min: 5, max: 70 },
+  '0.25kHz': { min: 5, max: 90 },
+  '0.5kHz': { min: 5, max: 110 },
+  '1kHz': { min: 0, max: 110 },
+  '2kHz': { min: 0, max: 110 },
+  '4kHz': { min: -5, max: 110 },
+  '8kHz': { min: -5, max: 100 },
+};
+export const LIMITS_BC = {
+  '0.25kHz': { min: 5, max: 60 },
+  '0.5kHz': { min: 5, max: 65 },
+  '1kHz': { min: 0, max: 70 },
+  '2kHz': { min: 0, max: 70 },
+  '4kHz': { min: -5, max: 65 },
+};
+
 export const BC_FREQS = new Set(['0.25kHz', '0.5kHz', '1kHz', '2kHz', '4kHz']);
 export const CARHART_MIN_DEPTH_DB = 5;
+/** C5-dip 最小深さ（生成器と同値の検証側定義。Coles参考の著者設定） */
+export const NOISE_NOTCH_MIN_DEPTH_DB = 10;
+export const SUDDEN_MIN_LATERALITY_DB = 30;
+export const MUMPS_MIN_MEAN_AC_DB = 70;
+export const MUMPS_MIN_LATERALITY_DB = 55;
 /** 発現確率の許容帯（二項、大標本向け。設定80%に対する観測率） */
 export const CARHART_RATE_LO = 0.70;
 export const CARHART_RATE_HI = 0.90;
@@ -81,6 +104,59 @@ export function checkRounding(caseData) {
   return true;
 }
 
+/** 数値閾値が周波数別上下限内か（境界値＝min/max は適合、範囲外は不適合）。SO点も数値があれば評価 */
+export function isAcWithinLimits(freq, ac) {
+  const lim = LIMITS_AC[freq];
+  if (!lim || !Number.isFinite(ac)) return null;
+  return ac >= lim.min - 1e-9 && ac <= lim.max + 1e-9;
+}
+
+export function isBcWithinLimits(freq, bc) {
+  const lim = LIMITS_BC[freq];
+  if (!lim || !Number.isFinite(bc)) return null;
+  return bc >= lim.min - 1e-9 && bc <= lim.max + 1e-9;
+}
+
+/**
+ * P4: 気導・骨導の周波数別上下限（症例単位）。
+ * 評価可能な数値点が1つも無い場合は不適合（空合格を避ける）。
+ */
+export function checkLimits(caseData) {
+  let n = 0;
+  for (const side of ['right', 'left']) {
+    for (const r of earRows(caseData, side)) {
+      if (Number.isFinite(r.ac)) {
+        n += 1;
+        if (isAcWithinLimits(r.freq, r.ac) !== true) return false;
+      }
+      if (Number.isFinite(r.bc)) {
+        n += 1;
+        if (isBcWithinLimits(r.freq, r.bc) !== true) return false;
+      }
+    }
+  }
+  return n > 0;
+}
+
+/** 点単位カウント用。{ ok, n } */
+export function countLimitPoints(caseData) {
+  let ok = 0;
+  let n = 0;
+  for (const side of ['right', 'left']) {
+    for (const r of earRows(caseData, side)) {
+      if (Number.isFinite(r.ac)) {
+        n += 1;
+        if (isAcWithinLimits(r.freq, r.ac) === true) ok += 1;
+      }
+      if (Number.isFinite(r.bc)) {
+        n += 1;
+        if (isBcWithinLimits(r.freq, r.bc) === true) ok += 1;
+      }
+    }
+  }
+  return { ok, n };
+}
+
 function checkMinAbgOnRows(rows, map) {
   let n = 0;
   for (const r of rows) {
@@ -137,13 +213,14 @@ export function checkAomMixed(caseData) {
   return true;
 }
 
-/** C5-dip: AC(4 kHz) > AC(2 kHz) かつ AC(4 kHz) > AC(8 kHz)。判定不能は null */
+/** C5-dip: AC(4) ≥ AC(2)+10 かつ AC(4) ≥ AC(8)+10。判定不能は null */
 function notchOkOnRows(rows) {
   const ac2 = rows.find((r) => r.freq === '2kHz')?.ac;
   const ac4 = rows.find((r) => r.freq === '4kHz')?.ac;
   const ac8 = rows.find((r) => r.freq === '8kHz')?.ac;
   if (![ac2, ac4, ac8].every((v) => Number.isFinite(v))) return null;
-  return ac4 > ac2 && ac4 > ac8;
+  return ac4 >= ac2 + NOISE_NOTCH_MIN_DEPTH_DB - 1e-9
+    && ac4 >= ac8 + NOISE_NOTCH_MIN_DEPTH_DB - 1e-9;
 }
 
 /** 両側性騒音: 左右とも C5-dip。判定不能が片耳でもあれば false（厳格） */
@@ -153,6 +230,25 @@ export function checkNoiseNotch(caseData) {
     if (ok !== true) return false;
   }
   return true;
+}
+
+/** 突発: 病側−対側 mean AC(0.5/1/2) ≥ minDiff */
+export function checkSuddenLaterality(caseData, minDiff = SUDDEN_MIN_LATERALITY_DB) {
+  const { diseased, contra } = diseasedEar(caseData);
+  const d = meanAC(diseased, ['0.5kHz', '1kHz', '2kHz']);
+  const n = meanAC(contra, ['0.5kHz', '1kHz', '2kHz']);
+  if (d == null || n == null) return false;
+  return d - n >= minDiff - 1e-9;
+}
+
+/** ムンプス: 病側 mean AC ≥ 床 かつ 一側差 ≥ 床 */
+export function checkMumpsSeverityFloor(caseData) {
+  const { diseased, contra } = diseasedEar(caseData);
+  const d = meanAC(diseased, ['0.5kHz', '1kHz', '2kHz']);
+  const n = meanAC(contra, ['0.5kHz', '1kHz', '2kHz']);
+  if (d == null || n == null) return false;
+  return d >= MUMPS_MIN_MEAN_AC_DB - 1e-9
+    && d - n >= MUMPS_MIN_LATERALITY_DB - 1e-9;
 }
 
 /** Carhart様幾何: BC2 − mean(BC1,BC4) ≥ 5 かつ BC2 > BC1 かつ BC2 > BC4 */

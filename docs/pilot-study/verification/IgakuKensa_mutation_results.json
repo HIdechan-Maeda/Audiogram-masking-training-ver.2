@@ -1,0 +1,28 @@
+{
+  "date": "2026-09-04T13:39:25.394Z",
+  "passed": 31,
+  "total": 31,
+  "note": "Author-defined rule-violating cases must be rejected (negative testing / intentional fault injection into the verifier; not classical source-code mutation; not independent third-party verification).",
+  "mapping": {
+    "43dB_non5": "M3",
+    "Normal_ABG20": "M6",
+    "SNHL_BC_worse": "M7",
+    "CHL_ABG_gone": "M2",
+    "Noise_notch_gone": "M1",
+    "Sudden_diff_lt30": "M4",
+    "Severity_improves": "M12",
+    "Carhart_2k_gone": "M5",
+    "Illicit_SO": "M13",
+    "Meta_mismatch": "M8",
+    "C1_SO_only": "M10",
+    "AOM_mixed_4k_BC_gone": "M14",
+    "AC_above_limit": "M15",
+    "BC_above_limit": "M16",
+    "AC_below_limit": "M17",
+    "BC_below_limit": "M18",
+    "C5_shallow_5dB": "M19",
+    "Mumps_too_mild": "M20",
+    "AC_at_upper_boundary": "B11",
+    "BC_at_upper_boundary": "B12"
+  }
+}
