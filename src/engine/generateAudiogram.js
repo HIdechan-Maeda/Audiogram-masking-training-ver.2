@@ -200,7 +200,7 @@ export const MUMPS_MIN_LATERALITY_DB = 55;
 /**
  * 突発性難聴のスケールアウト（教育用・ムンプスと役割分担）
  * - ムンプス: 約50%で患側の全周波数 SO（高度一側を明示）
- * - 突発: 程度2で高音SO、程度3で高音SOまたはまれに全周SO（測定可能な帯域を残しつつNRも提示）
+ * - 突発: 程度2で高音SO、程度3で高音SOまたはまれに全周波数SO（測定可能な帯域を残しつつNRも提示）
  */
 export const SUDDEN_SO_FULL_PROB = 0.12; // severity≥3
 export const SUDDEN_SO_HF_PROB_SEV2 = 0.20;
@@ -640,7 +640,7 @@ export function generateAudiogram(opts = {}) {
       left = diseasedLeft;
     }
 
-    // 突発: 高音SO／まれに全周SO（ムンプスの高率全周SOと役割分担）
+    // 突発: 高音SO／まれに全周波数SO（ムンプスの高率全周波数SOと役割分担）
     if (profile === 'SNHL_Sudden') {
       const decided = decideSuddenSoMode(rand, severity);
       suddenSoMode = decided.mode;

@@ -671,13 +671,13 @@ const md = [
   `- 一側差 Mumps 程度1: ${fmtQ(descriptive.unilateralMumpsSev1)}`,
   `- 一側差 Mumps 程度2: ${fmtQ(descriptive.unilateralMumpsSev2)}`,
   `- 一側差 Mumps 程度3: ${fmtQ(descriptive.unilateralMumpsSev3)}`,
-  `- Sudden SO（程度≥1）: なし${counters.suddenSo.none}件、高音域のみ${counters.suddenSo.hf}件、全周${counters.suddenSo.full}件`
-    + `／程度1: なし${counters.suddenSo.bySev[1].none}・高音${counters.suddenSo.bySev[1].hf}・全周${counters.suddenSo.bySev[1].full}`
-    + `／程度2: なし${counters.suddenSo.bySev[2].none}・高音${counters.suddenSo.bySev[2].hf}・全周${counters.suddenSo.bySev[2].full}`
-    + `／程度3: なし${counters.suddenSo.bySev[3].none}・高音${counters.suddenSo.bySev[3].hf}・全周${counters.suddenSo.bySev[3].full}`,
-  `- Mumps 全周SO（程度≥1）: ${counters.mumpsFullSo}/${counters.mumpsN}`
+  `- Sudden SO（程度≥1）: なし${counters.suddenSo.none}件、高音域のみ${counters.suddenSo.hf}件、全周波数${counters.suddenSo.full}件`
+    + `／程度1: なし${counters.suddenSo.bySev[1].none}・高音${counters.suddenSo.bySev[1].hf}・全周波数${counters.suddenSo.bySev[1].full}`
+    + `／程度2: なし${counters.suddenSo.bySev[2].none}・高音${counters.suddenSo.bySev[2].hf}・全周波数${counters.suddenSo.bySev[2].full}`
+    + `／程度3: なし${counters.suddenSo.bySev[3].none}・高音${counters.suddenSo.bySev[3].hf}・全周波数${counters.suddenSo.bySev[3].full}`,
+  `- Mumps 全周波数SO（程度≥1）: ${counters.mumpsFullSo}/${counters.mumpsN}`
     + (counters.mumpsN ? ` (${(100 * counters.mumpsFullSo / counters.mumpsN).toFixed(1)}%)` : ''),
-  `- 床規則（全周SO除外）: 突発一側差 ${counters.suddenLatNoFullSoOk}/${counters.suddenLatNoFullSoN}`
+  `- 床規則（全周波数SO除外）: 突発一側差 ${counters.suddenLatNoFullSoOk}/${counters.suddenLatNoFullSoN}`
     + `、突発程度3 ${counters.suddenLatSev3NoFullSoOk}/${counters.suddenLatSev3NoFullSoN}`
     + `、ムンプス ${counters.mumpsFloorNoFullSoOk}/${counters.mumpsFloorNoFullSoN}`
     + `、ムンプス（0.5/1/2 kHzにSOなし） ${counters.mumpsFloorNoMeanSoOk}/${counters.mumpsFloorNoMeanSoN}`,
@@ -691,7 +691,7 @@ const md = [
   '',
   '- スケールアウト（SO）点は、当該周波数の教育用気導上限値を数値として保持し、SOフラグを付す。上限＋5 dB等の外挿代入は行わない。',
   '- 一側差・病側平均（0.5/1/2 kHz）の算出では、上記の数値（上限値）を含め、3周波がすべて有限である場合のみ平均する。いずれかが非数なら当該例は判定不能（主合否では不適合扱い）。',
-  '- G3-SuddenLat / G3-MumpsFloor の分母720は、SO例を除外せず、SO点を上限値代入したうえで床規則を評価した結果である。全周SOを除いた適合率は記述統計に別掲する。',
+  '- G3-SuddenLat / G3-MumpsFloor の分母720は、SO例を除外せず、SO点を上限値代入したうえで床規則を評価した結果である。全周波数SOを除いた適合率は記述統計に別掲する。',
   '',
   `実行: Node ${summary.runtime.node} / ${summary.runtime.platform} / ${summary.runtime.packageName}@${summary.runtime.packageVersion}`,
   '',].join('\n');
