@@ -1,7 +1,6 @@
 # 電子付録1（Markdown控え）
 
-投稿用の体裁は `Supplement1_verification_v2.32.docx` を正とする（Word表・日本語表記）。
-本ファイルは検証スクリプト出力の控えである。
+投稿用の体裁は `Supplement1_verification_v2.32.docx` を正とする。
 
 # 聴力像自動生成・仕様適合検証結果
 

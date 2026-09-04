@@ -408,7 +408,8 @@
       "n": 540,
       "rate": 100,
       "note": "SNHL_Age:60/60; SNHL_NoiseNotch:60/60; SNHL_Meniere:60/60; SNHL_Sudden:60/60; SNHL_Mumps:60/60; CHL_OME:60/60; CHL_AOM:60/60; CHL_Otosclerosis:60/60; CHL_OssicularDiscontinuity:60/60",
-      "descriptive": false
+      "descriptive": false,
+      "noteDetail": "SNHL_Age:60/60; SNHL_NoiseNotch:60/60; SNHL_Meniere:60/60; SNHL_Sudden:60/60; SNHL_Mumps:60/60; CHL_OME:60/60; CHL_AOM:60/60; CHL_Otosclerosis:60/60; CHL_OssicularDiscontinuity:60/60"
     },
     {
       "id": "T7",
