@@ -1,10 +1,10 @@
 # 電子付録1（Markdown控え）
 
-投稿用の体裁は `Supplement1_verification_v2.32.docx` を正とする。
+投稿用の体裁は `Supplement1_verification_v2.33.docx` を正とする。
 
 # 聴力像自動生成・仕様適合検証結果
 
-> 投稿用体裁の詳細（ISO相対基準・下限クリップ・手計算24例・T欠番）は Supplement1_verification_v2.32.docx を正とする。
+> 投稿用体裁の詳細（ISO相対基準・下限クリップ・手計算24例・T欠番）は Supplement1_verification_v2.33.docx を正とする。
 
 
 - 実行日時: 2026-09-04T14:18:50.939Z
