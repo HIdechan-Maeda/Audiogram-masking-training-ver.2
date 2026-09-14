@@ -3,6 +3,9 @@ import { generateAudiogram, EngineConstants } from './engine/generateAudiogram';
 import { buildCompanionBundle } from './engine/buildCompanionTests';
 import { buildLessonCaseUrl, lessonSpecFromGenerated } from './engine/lessonCaseShare';
 import { publishLessonPreset, listLessonPresets, deleteLessonPreset } from './engine/lessonPresetStore';
+import TympanogramGif from './TympanogramGif';
+import StapedialReflexGif from './StapedialReflexGif';
+import DPOAE from './DPOAE';
 
 const PROFILE_LABELS = {
   Normal: '正常',
@@ -266,7 +269,7 @@ const AudiogramPreview = forwardRef(function AudiogramPreview({ right, left }, r
   );
 });
 
-function CompanionPreview({ companion, includeTym, includeArt, includeDpoae }) {
+function CompanionPreview({ companion, includeTym, includeArt, includeDpoae, onOpenTym, onOpenArt, onOpenDpoae }) {
   if (!companion) return null;
   const { summary } = companion;
   const cards = [];
@@ -279,8 +282,18 @@ function CompanionPreview({ companion, includeTym, includeArt, includeDpoae }) {
       return `${type} / ${e.peakPressure ?? '—'} daPa / ${e.peakCompliance ?? '—'} mL`;
     };
     cards.push(
-      <div key="tym" className="border border-gray-200 rounded-xl p-4 bg-white">
-        <div className="text-sm font-semibold text-gray-800 mb-2">ティンパノメトリー</div>
+      <div key="tym" className="border border-blue-200 rounded-xl p-4 bg-white">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="text-sm font-semibold text-gray-800">ティンパノメトリー</div>
+          <button
+            type="button"
+            onClick={onOpenTym}
+            disabled={!companion.tympanogram}
+            className="px-2 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
+          >
+            表示
+          </button>
+        </div>
         <p className="text-xs text-gray-500 mb-2">全体型: {t.overall}</p>
         <ul className="text-xs text-gray-700 space-y-1">
           <li>右: {fmtEar('right', t.rightType)}</li>
@@ -293,8 +306,18 @@ function CompanionPreview({ companion, includeTym, includeArt, includeDpoae }) {
   if (includeArt && summary?.art) {
     const a = summary.art;
     cards.push(
-      <div key="art" className="border border-gray-200 rounded-xl p-4 bg-white">
-        <div className="text-sm font-semibold text-gray-800 mb-2">ART（アブミ骨筋反射）</div>
+      <div key="art" className="border border-purple-200 rounded-xl p-4 bg-white">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="text-sm font-semibold text-gray-800">ART（アブミ骨筋反射）</div>
+          <button
+            type="button"
+            onClick={onOpenArt}
+            disabled={!companion.artConfig}
+            className="px-2 py-1 text-xs rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-40"
+          >
+            表示
+          </button>
+        </div>
         <ul className="text-xs text-gray-700 space-y-1">
           <li>右 IPSI: {a.right.ipsi} / CONT: {a.right.cont}</li>
           <li>左 IPSI: {a.left.ipsi} / CONT: {a.left.cont}</li>
@@ -306,8 +329,18 @@ function CompanionPreview({ companion, includeTym, includeArt, includeDpoae }) {
   if (includeDpoae && summary?.dpoae) {
     const d = summary.dpoae;
     cards.push(
-      <div key="dpoae" className="border border-gray-200 rounded-xl p-4 bg-white">
-        <div className="text-sm font-semibold text-gray-800 mb-2">DPOAE</div>
+      <div key="dpoae" className="border border-orange-200 rounded-xl p-4 bg-white">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="text-sm font-semibold text-gray-800">DPOAE</div>
+          <button
+            type="button"
+            onClick={onOpenDpoae}
+            disabled={!companion.dpoaeConfig}
+            className="px-2 py-1 text-xs rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-40"
+          >
+            表示
+          </button>
+        </div>
         <ul className="text-xs text-gray-700 space-y-1">
           <li>右: {d.rightPresent}</li>
           <li>左: {d.leftPresent}</li>
@@ -322,7 +355,12 @@ function CompanionPreview({ companion, includeTym, includeArt, includeDpoae }) {
     );
   }
 
-  return <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{cards}</div>;
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-gray-500">学生画面と同じ検査 UI で連動結果を確認できます（「表示」）。</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{cards}</div>
+    </div>
+  );
 }
 
 function ThresholdTable({ right, left }) {
@@ -382,6 +420,9 @@ export default function InstructorCaseGenerator() {
   const [pngBusy, setPngBusy] = useState(false);
   const [shareStatus, setShareStatus] = useState('');
   const [publishedList, setPublishedList] = useState(() => listLessonPresets());
+  const [showTym, setShowTym] = useState(false);
+  const [showArt, setShowArt] = useState(false);
+  const [showDpoae, setShowDpoae] = useState(false);
   const audiogramSvgRef = useRef(null);
 
   const needsSide = UNILATERAL.has(profile);
@@ -628,14 +669,74 @@ export default function InstructorCaseGenerator() {
             >
               リンクコピー（補助）
             </button>
-          </div>          <AudiogramPreview ref={audiogramSvgRef} right={caseData.right} left={caseData.left} />
+          </div>
+          <AudiogramPreview ref={audiogramSvgRef} right={caseData.right} left={caseData.left} />
           <ThresholdTable right={caseData.right} left={caseData.left} />
           <CompanionPreview
             companion={companion}
             includeTym={includeTym}
             includeArt={includeArt}
             includeDpoae={includeDpoae}
+            onOpenTym={() => setShowTym(true)}
+            onOpenArt={() => setShowArt(true)}
+            onOpenDpoae={() => setShowDpoae(true)}
           />
+        </div>
+      )}
+
+      {showTym && companion?.tympanogram && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-lg p-6 max-w-4xl w-full max-h-[95vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-blue-800">ティンパノグラム（連動確認）</h3>
+              <button type="button" onClick={() => setShowTym(false)} className="px-3 py-1.5 rounded-lg bg-gray-200 text-sm">閉じる</button>
+            </div>
+            <TympanogramGif
+              width={800}
+              height={600}
+              tympanogramData={companion.tympanogram}
+              durationMs={5000}
+              fps={20}
+            />
+          </div>
+        </div>
+      )}
+
+      {showArt && companion?.artConfig && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-lg p-6 max-w-5xl w-full max-h-[95vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-purple-800">ART（連動確認）</h3>
+              <button type="button" onClick={() => setShowArt(false)} className="px-3 py-1.5 rounded-lg bg-gray-200 text-sm">閉じる</button>
+            </div>
+            <StapedialReflexGif
+              width={1000}
+              height={900}
+              durationMs={17000}
+              fps={20}
+              hearingConfig={companion.artConfig}
+            />
+          </div>
+        </div>
+      )}
+
+      {showDpoae && companion?.dpoaeConfig && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-lg p-6 max-w-[95vw] w-full max-h-[95vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-orange-800">DPOAE（連動確認）</h3>
+              <button type="button" onClick={() => setShowDpoae(false)} className="px-3 py-1.5 rounded-lg bg-gray-200 text-sm">閉じる</button>
+            </div>
+            <div style={{ width: '100%', overflowX: 'auto' }}>
+              <DPOAE
+                width={Math.max(1100, typeof window !== 'undefined' ? window.innerWidth * 0.85 : 1100)}
+                height={600}
+                dpoaeData={companion.dpoaeData}
+                durationMs={10000}
+                fps={20}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
