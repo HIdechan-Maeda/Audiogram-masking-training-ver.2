@@ -113,11 +113,12 @@ export function buildSimpleTympanogramFromProfile(profileName, meta = {}, rand =
       return { config: { peakPressure: peak, peakCompliance: 0.3, sigma: 80 }, type: 'B' };
     }
     if (earProfile === 'CHL_OME') {
-      // severity≤1 → C（軽度陰圧）、severity≥2 → B（平坦・低コンプライアンス）
+      // severity≤1 → C（軽度陰圧）、severity≥2 → B（平坦型）
+      // ※ peakPressure=0 + 低コンプライアンスは As に見えるため、B は -200 daPa 側へ寄せる
       if (resolveOmeMildForEar(meta, earKey)) {
         return { config: { peakPressure: -150, peakCompliance: 1.0, sigma: 60 }, type: 'C' };
       }
-      return { config: { peakPressure: 0, peakCompliance: 0.25, sigma: 90 }, type: 'B' };
+      return { config: { peakPressure: -200, peakCompliance: 0.2, sigma: 80 }, type: 'B' };
     }
     return { config: { peakPressure: 0, peakCompliance: 1.1, sigma: 60 }, type: 'A' };
   };
@@ -149,7 +150,8 @@ export function buildSimpleTympanogramFromProfile(profileName, meta = {}, rand =
     } else if (leftResult.type === 'B') {
       left = {
         ...left,
-        peakCompliance: Number(Math.max(0.15, Math.min(0.35, left.peakCompliance * 0.92)).toFixed(2)),
+        // B型はピーク位置をずらさず、平坦さをわずかに左右差だけつける
+        peakCompliance: Number(Math.max(0.1, Math.min(0.25, left.peakCompliance * 0.85)).toFixed(2)),
       };
     } else {
       left = {
