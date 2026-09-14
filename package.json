@@ -11,7 +11,10 @@
     "eject": "react-scripts eject",
     "build:tymp": "node scripts/build-tymp.js",
     "verify:audiogram": "node scripts/verify-audiogram-generation.mjs",
-    "verify:audiogram:mutations": "node scripts/verify-audiogram-mutations.mjs"
+    "verify:audiogram:mutations": "node scripts/verify-audiogram-mutations.mjs",
+    "teaching:build": "node teaching/build/build.mjs",
+    "teaching:sync": "node teaching/build/sync-thresholds.mjs",
+    "teaching:import": "node teaching/build/import-edu-export.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",
@@ -36,6 +39,7 @@
     ]
   },
   "devDependencies": {
+    "docx": "^9.7.1",
     "dotenv-cli": "^11.0.0",
     "pptxgenjs": "^4.0.1"
   },

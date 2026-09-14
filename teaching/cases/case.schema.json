@@ -1,0 +1,215 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AudioScope EDU 臨床推論課題 症例定義",
+  "description": "EDU の生成条件と課題シートの内容を兼ねる単一の情報源。",
+  "type": "object",
+  "required": ["id", "level", "title", "generation", "masking", "stages"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^case\\d{2}$" },
+    "level": { "type": "integer", "minimum": 1, "maximum": 3, "description": "1=整合の型 2=鑑別 3=矛盾検出" },
+    "title": { "type": "string" },
+    "subtitle": { "type": "string" },
+    "diagnosis": { "type": "string" },
+    "target": { "type": "string" },
+    "duration": { "type": "string" },
+    "examinations": { "type": "string" },
+    "objective": { "type": "string" },
+
+    "generation": {
+      "type": "object",
+      "description": "AudioScope EDU の生成器に渡る唯一の条件。EDU 側で重複定義しないこと。",
+      "required": ["profile", "ageGroup", "sex", "severity", "seed"],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "enum": ["Normal", "SNHL_Age", "SNHL_NoiseNotch", "SNHL_Meniere", "SNHL_Sudden", "SNHL_Mumps", "CHL_OME", "CHL_AOM", "CHL_Otosclerosis", "CHL_OssicularDiscontinuity"]
+        },
+        "ageGroup": {
+          "type": "string",
+          "enum": ["20s", "30s", "40s", "50s", "60s", "70s"],
+          "description": "検証グリッドは 20〜70 歳代。18歳未満は対象外。"
+        },
+        "sex": { "type": "string", "enum": ["male", "female"] },
+        "severity": { "type": "integer", "enum": [0, 1, 2, 3], "description": "0=なし 1=軽度 2=中等度 3=重度（教材用の区分。WHO 等の平均聴力等級とは異なる）" },
+        "ears": { "type": "string", "enum": ["both", "right", "left"] },
+        "seed": { "type": "integer", "description": "授業回ごとに固定して配布する。変更したら sync-thresholds を再実行すること。" }
+      }
+    },
+
+    "masking": {
+      "type": "object",
+      "description": "すべて教育用の設定値。臨床基準ではない。",
+      "required": ["interauralAttenuationAC", "interauralAttenuationBC", "safetyMargin"],
+      "properties": {
+        "interauralAttenuationAC": { "type": "number", "description": "気導の両耳間減衰量 dB。本学科の運用では 50 で固定。" },
+        "interauralAttenuationBC": { "type": "number", "description": "骨導の両耳間減衰量 dB。通常 0。" },
+        "safetyMargin": { "type": "number" },
+        "occlusionCorrection": { "type": "boolean", "description": "伝音難聴では閉鎖効果が生じにくいため、レベル1では false。" },
+        "frequencies": { "type": "array", "items": { "type": "number" } },
+        "testEar": { "type": "string", "enum": ["right", "left"] },
+        "nonTestEar": { "type": "string", "enum": ["right", "left"] }
+      }
+    },
+
+    "representativeThresholds": {
+      "type": "object",
+      "description": "教員用の代表値。build/sync-thresholds.mjs で EDU の生成結果から更新する。",
+      "properties": {
+        "source": { "type": "string", "enum": ["manual", "generator"] },
+        "generatedAt": { "type": "string" },
+        "ac": { "$ref": "#/definitions/earThresholds" },
+        "bc": { "$ref": "#/definitions/earThresholds" }
+      }
+    },
+
+    "history": { "type": "array", "items": { "type": "string" } },
+
+    "findings": {
+      "type": "object",
+      "description": "EDU が 4検査を連動生成できるようになるまでは、教員が手動提示する値。",
+      "properties": {
+        "tympanometry": { "type": "object", "properties": { "rows": { "type": "array" } } },
+        "acousticReflex": { "type": "object", "properties": { "rows": { "type": "array" } } },
+        "dpoae": {
+          "type": "object",
+          "properties": {
+            "criterionSNR": { "type": "number", "description": "反応ありと判定する SNR。本課題の設定値。" },
+            "frequencies": { "type": "array", "items": { "type": "string" } },
+            "snr": {
+              "type": "object",
+              "properties": {
+                "right": { "type": "array", "items": { "type": "number" } },
+                "left": { "type": "array", "items": { "type": "number" } }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "teaching": {
+      "type": "object",
+      "description": "教員用のみに出力される。なぜその設計かを残すこと。",
+      "properties": {
+        "coreMessage": { "type": "string" },
+        "rationale": { "type": "array", "items": { "type": "string" } },
+        "orderRationale": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "paragraphs": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "secondaryAims": { "type": "string" },
+        "expectedOutput": { "type": "string" },
+        "seedWarning": { "type": "string" }
+      }
+    },
+
+    "stages": {
+      "type": "array",
+      "description": "S1〜S6。段階提示の順序を崩さないこと。",
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^S\\d$" },
+          "title": { "type": "string" },
+          "intro": { "type": "string" },
+          "showHistory": { "type": "boolean" },
+          "showTympanometry": { "type": "boolean" },
+          "showAcousticReflex": { "type": "boolean" },
+          "showDpoae": { "type": "boolean" },
+          "showThresholdEntry": { "type": "boolean" },
+          "showAirMaskingCheck": { "type": "boolean" },
+          "showBoneMaskingCalc": { "type": "boolean" },
+          "questions": { "type": "array", "items": { "$ref": "#/definitions/question" } }
+        }
+      }
+    },
+
+    "studentRules": { "type": "array", "items": { "type": "string" } },
+    "submissionChecklist": { "type": "array", "items": { "type": "string" } },
+    "commonErrors": {
+      "type": "array",
+      "description": "[誤答, 頻度, 対応] の3要素",
+      "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "string" } }
+    },
+    "rubric": {
+      "type": "object",
+      "properties": {
+        "total": { "type": "integer" },
+        "rows": {
+          "type": "array",
+          "description": "[軸, 5点, 3点, 1点] の4要素。「検査間の整合」の軸を必ず含めること。",
+          "items": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "string" } }
+        },
+        "passNote": { "type": "string" }
+      }
+    },
+    "implementationNotes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "EDU の実装状況に依存する確認事項。未確認のものは断定しない。"
+    },
+    "valueNotes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "教育用設定値であることの注記。省略しないこと。"
+    }
+  },
+
+  "definitions": {
+    "earThresholds": {
+      "type": "object",
+      "properties": {
+        "right": { "type": "object", "additionalProperties": { "type": "number" } },
+        "left": { "type": "object", "additionalProperties": { "type": "number" } }
+      }
+    },
+    "question": {
+      "type": "object",
+      "required": ["id", "prompt"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^Q\\d-\\d$" },
+        "prompt": { "type": "string", "description": "学生用。答えを混ぜない。誘導しない。" },
+        "note": { "type": "string" },
+        "quote": { "type": "string", "description": "正誤を問う引用文" },
+        "choices": { "type": "string" },
+        "space": { "$ref": "#/definitions/space" },
+        "computed": { "type": "string", "description": "正答を計算で導く場合のキー（render-teacher.mjs の computedAnswer）" },
+        "answer": { "type": "array", "items": { "type": "string" }, "description": "教員用のみ" },
+        "answerTable": {
+          "type": "object",
+          "properties": {
+            "widths": { "type": "array", "items": { "type": "number" } },
+            "header": { "type": "array", "items": { "type": "string" } },
+            "rows": { "type": "array" }
+          }
+        },
+        "answerBox": {
+          "type": "object",
+          "properties": {
+            "fill": { "type": "string", "enum": ["info", "warn", "plain"] },
+            "lines": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "space": {
+      "type": "object",
+      "description": "学生の記入欄",
+      "properties": {
+        "type": { "type": "string", "enum": ["lines", "fillTable"] },
+        "count": { "type": "integer", "description": "lines のとき: 罫線の本数" },
+        "height": { "type": "integer", "description": "lines のとき: 1行の高さ twips。既定 460" },
+        "widths": { "type": "array", "items": { "type": "number" }, "description": "fillTable のとき: 合計を 9020 に合わせる" },
+        "header": { "type": "array", "items": { "type": "string" } },
+        "headerOnly": { "type": "boolean" },
+        "rows": { "type": "array" },
+        "rowHeight": { "type": "integer" },
+        "center": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@ import { generateAudiogram, EngineConstants } from './engine/generateAudiogram';
 import { buildCompanionBundle } from './engine/buildCompanionTests';
 import { buildLessonCaseUrl, lessonSpecFromGenerated } from './engine/lessonCaseShare';
 import { publishLessonPreset, listLessonPresets, deleteLessonPreset } from './engine/lessonPresetStore';
+import { buildTeachingCaseExport, downloadJsonFile } from './engine/exportTeachingCase';
 import TympanogramGif from './TympanogramGif';
 import StapedialReflexGif from './StapedialReflexGif';
 import DPOAE from './DPOAE';
@@ -423,6 +424,7 @@ export default function InstructorCaseGenerator() {
   const [showTym, setShowTym] = useState(false);
   const [showArt, setShowArt] = useState(false);
   const [showDpoae, setShowDpoae] = useState(false);
+  const [teachingCaseId, setTeachingCaseId] = useState('case02');
   const audiogramSvgRef = useRef(null);
 
   const needsSide = UNILATERAL.has(profile);
@@ -456,6 +458,33 @@ export default function InstructorCaseGenerator() {
     setShareStatus(`「${entry.label}」を登録しました`);
     window.alert(`学生プリセットに「${entry.label}」を登録しました。\n学生画面を開く（または再読み込み）と、症例プリセット一覧に出ます。`);
     setTimeout(() => setShareStatus(''), 5000);
+  };
+
+  const exportTeachingCase = () => {
+    if (!caseData) {
+      window.alert('先に「症例を生成」してください。');
+      return;
+    }
+    const id = /^case\d{2}$/.test(teachingCaseId.trim()) ? teachingCaseId.trim() : 'case02';
+    setTeachingCaseId(id);
+    const exported = buildTeachingCaseExport({
+      caseData,
+      companion,
+      caseId: id,
+      includeTym,
+      includeArt,
+      includeDpoae,
+    });
+    const filename = `${id}_edu_export.json`;
+    downloadJsonFile(exported, filename);
+    setShareStatus(`${filename} をダウンロードしました`);
+    window.alert(
+      `臨床推論課題用 JSON をダウンロードしました（${filename}）。\n\n` +
+      `次にターミナルで取り込み→Word生成:\n` +
+      `  node teaching/build/import-edu-export.mjs ~/${filename} --build\n\n` +
+      `（Downloads に保存した場合はパスを合わせてください）`
+    );
+    setTimeout(() => setShareStatus(''), 6000);
   };
 
   const copyShareLink = async () => {
@@ -513,7 +542,7 @@ export default function InstructorCaseGenerator() {
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-gray-900">教材生成（試作）</h2>
         <p className="text-sm text-gray-600 mt-1">
-          症例を生成して「OK（学生プリセットへ登録）」すると、学生画面のプリセット一覧に「教材1」などが追加されます。
+          EDU で症例を作り、学生プリセットへ登録するか、臨床推論課題（Word）用 JSON として書き出せます。
         </p>
       </div>
 
@@ -609,6 +638,23 @@ export default function InstructorCaseGenerator() {
           className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 text-sm font-medium"
         >
           OK（学生プリセットへ登録）
+        </button>
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+          課題ID
+          <input
+            className="w-24 px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+            value={teachingCaseId}
+            onChange={(e) => setTeachingCaseId(e.target.value)}
+            placeholder="case02"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={exportTeachingCase}
+          disabled={!caseData}
+          className="px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 disabled:opacity-40 text-sm font-medium"
+        >
+          臨床推論課題へ書き出す
         </button>
         <button
           type="button"
