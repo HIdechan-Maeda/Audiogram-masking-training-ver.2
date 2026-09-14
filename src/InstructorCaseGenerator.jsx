@@ -1,5 +1,8 @@
 import React, { forwardRef, useMemo, useRef, useState } from 'react';
 import { generateAudiogram, EngineConstants } from './engine/generateAudiogram';
+import { buildCompanionBundle } from './engine/buildCompanionTests';
+import { buildLessonCaseUrl, lessonSpecFromGenerated } from './engine/lessonCaseShare';
+import { publishLessonPreset, listLessonPresets, deleteLessonPreset } from './engine/lessonPresetStore';
 
 const PROFILE_LABELS = {
   Normal: '正常',
@@ -263,6 +266,65 @@ const AudiogramPreview = forwardRef(function AudiogramPreview({ right, left }, r
   );
 });
 
+function CompanionPreview({ companion, includeTym, includeArt, includeDpoae }) {
+  if (!companion) return null;
+  const { summary } = companion;
+  const cards = [];
+
+  if (includeTym && summary?.tym) {
+    const t = summary.tym;
+    const fmtEar = (ear, type) => {
+      const e = t[ear];
+      if (!e) return '—';
+      return `${type} / ${e.peakPressure ?? '—'} daPa / ${e.peakCompliance ?? '—'} mL`;
+    };
+    cards.push(
+      <div key="tym" className="border border-gray-200 rounded-xl p-4 bg-white">
+        <div className="text-sm font-semibold text-gray-800 mb-2">ティンパノメトリー</div>
+        <p className="text-xs text-gray-500 mb-2">全体型: {t.overall}</p>
+        <ul className="text-xs text-gray-700 space-y-1">
+          <li>右: {fmtEar('right', t.rightType)}</li>
+          <li>左: {fmtEar('left', t.leftType)}</li>
+        </ul>
+      </div>
+    );
+  }
+
+  if (includeArt && summary?.art) {
+    const a = summary.art;
+    cards.push(
+      <div key="art" className="border border-gray-200 rounded-xl p-4 bg-white">
+        <div className="text-sm font-semibold text-gray-800 mb-2">ART（アブミ骨筋反射）</div>
+        <ul className="text-xs text-gray-700 space-y-1">
+          <li>右 IPSI: {a.right.ipsi} / CONT: {a.right.cont}</li>
+          <li>左 IPSI: {a.left.ipsi} / CONT: {a.left.cont}</li>
+        </ul>
+      </div>
+    );
+  }
+
+  if (includeDpoae && summary?.dpoae) {
+    const d = summary.dpoae;
+    cards.push(
+      <div key="dpoae" className="border border-gray-200 rounded-xl p-4 bg-white">
+        <div className="text-sm font-semibold text-gray-800 mb-2">DPOAE</div>
+        <ul className="text-xs text-gray-700 space-y-1">
+          <li>右: {d.rightPresent}</li>
+          <li>左: {d.leftPresent}</li>
+        </ul>
+      </div>
+    );
+  }
+
+  if (!cards.length) {
+    return (
+      <p className="text-xs text-gray-400">併用検査はオフです。上のチェックを入れて再生成してください。</p>
+    );
+  }
+
+  return <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{cards}</div>;
+}
+
 function ThresholdTable({ right, left }) {
   const freqs = EngineConstants.FREQS;
   const fmt = (row, key) => {
@@ -313,10 +375,18 @@ export default function InstructorCaseGenerator() {
   const [affectedSide, setAffectedSide] = useState('auto');
   const [seedInput, setSeedInput] = useState('');
   const [caseData, setCaseData] = useState(null);
+  const [companion, setCompanion] = useState(null);
+  const [includeTym, setIncludeTym] = useState(true);
+  const [includeArt, setIncludeArt] = useState(true);
+  const [includeDpoae, setIncludeDpoae] = useState(true);
   const [pngBusy, setPngBusy] = useState(false);
+  const [shareStatus, setShareStatus] = useState('');
+  const [publishedList, setPublishedList] = useState(() => listLessonPresets());
   const audiogramSvgRef = useRef(null);
 
   const needsSide = UNILATERAL.has(profile);
+
+  const refreshPublished = () => setPublishedList(listLessonPresets());
 
   const downloadPng = async () => {
     if (!audiogramSvgRef.current || !caseData) return;
@@ -334,13 +404,49 @@ export default function InstructorCaseGenerator() {
     }
   };
 
+  const publishToStudentPresets = () => {
+    if (!caseData) {
+      window.alert('先に「症例を生成」してください。');
+      return;
+    }
+    const spec = lessonSpecFromGenerated(caseData, { includeTym, includeArt, includeDpoae });
+    const entry = publishLessonPreset(spec);
+    refreshPublished();
+    setShareStatus(`「${entry.label}」を登録しました`);
+    window.alert(`学生プリセットに「${entry.label}」を登録しました。\n学生画面を開く（または再読み込み）と、症例プリセット一覧に出ます。`);
+    setTimeout(() => setShareStatus(''), 5000);
+  };
+
+  const copyShareLink = async () => {
+    if (!caseData) return;
+    const spec = lessonSpecFromGenerated(caseData, { includeTym, includeArt, includeDpoae });
+    const url = buildLessonCaseUrl(spec);
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareStatus('共有リンクをコピーしました（補助手段）');
+    } catch (err) {
+      console.error('clipboard failed', err);
+      window.prompt('コピーできない場合は手動でコピーしてください', url);
+      setShareStatus('リンクを表示しました');
+    }
+    setTimeout(() => setShareStatus(''), 2500);
+  };
+
   const generate = () => {
     const opts = { ageGroup, sex, profile, severity: Number(severity) };
     if (needsSide && affectedSide !== 'auto') opts.affectedSide = affectedSide;
     if (seedInput !== '' && Number.isFinite(Number(seedInput))) opts.seed = Number(seedInput);
     const data = generateAudiogram(opts);
+    const bundle = buildCompanionBundle(data, {
+      includeTym,
+      includeArt,
+      includeDpoae,
+      disorderName: profile,
+    });
     setCaseData(data);
+    setCompanion(bundle);
     setSeedInput(String(data.meta.seed));
+    setShareStatus('');
   };
 
   const metaBits = useMemo(() => {
@@ -366,7 +472,7 @@ export default function InstructorCaseGenerator() {
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-gray-900">教材生成（試作）</h2>
         <p className="text-sm text-gray-600 mt-1">
-          学習者画面には出さない条件指定です。授業デモ・内容確認用。いまはオージオグラムのみ。TYM／ART／DPOAE は同じ症例につなぐ予定です。
+          症例を生成して「OK（学生プリセットへ登録）」すると、学生画面のプリセット一覧に「教材1」などが追加されます。
         </p>
       </div>
 
@@ -428,22 +534,75 @@ export default function InstructorCaseGenerator() {
         </label>
       </div>
 
+      <fieldset className="mb-4">
+        <legend className="text-sm font-medium text-gray-800 mb-2">教材に含める検査</legend>
+        <div className="flex flex-wrap gap-4 text-sm text-gray-700">
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={includeTym} onChange={(e) => setIncludeTym(e.target.checked)} />
+            ティンパノメトリー
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={includeArt} onChange={(e) => setIncludeArt(e.target.checked)} />
+            ART
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={includeDpoae} onChange={(e) => setIncludeDpoae(e.target.checked)} />
+            DPOAE
+          </label>
+        </div>
+        <p className="text-xs text-gray-400 mt-1">オージオグラムを親とし、同じ seed から併用検査を導出します。</p>
+      </fieldset>
+
       <div className="flex flex-wrap gap-2 mb-6">
         <button
           type="button"
           onClick={generate}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
         >
-          オージオグラムを生成
+          症例を生成
         </button>
         <button
           type="button"
-          onClick={() => { setSeedInput(''); setCaseData(null); }}
+          onClick={publishToStudentPresets}
+          disabled={!caseData}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 text-sm font-medium"
+        >
+          OK（学生プリセットへ登録）
+        </button>
+        <button
+          type="button"
+          onClick={() => { setSeedInput(''); setCaseData(null); setCompanion(null); }}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
         >
           クリア
         </button>
+        {shareStatus && <span className="text-sm text-indigo-700 self-center">{shareStatus}</span>}
       </div>
+
+      {publishedList.length > 0 && (
+        <div className="border border-indigo-100 rounded-xl p-3 bg-indigo-50 mb-6">
+          <div className="text-sm font-medium text-indigo-900 mb-2">登録済み（学生プリセットに表示中）</div>
+          <ul className="space-y-1">
+            {publishedList.map((p) => (
+              <li key={p.id} className="flex items-center justify-between gap-2 text-xs text-indigo-950">
+                <span>
+                  <strong>{p.label}</strong>
+                  <span className="text-indigo-700/80 ml-2">
+                    {p.spec?.profile} / sev{p.spec?.severity} / seed {p.spec?.seed}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="text-red-600 hover:underline"
+                  onClick={() => { deleteLessonPreset(p.id); refreshPublished(); }}
+                >
+                  削除
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {caseData && (
         <div className="space-y-4">
@@ -453,7 +612,7 @@ export default function InstructorCaseGenerator() {
             ))}
           </div>
           <p className="text-xs text-gray-500">記号は測定画面と同じ（右＝赤・左＝青）。学習者の正答照合は緑です。</p>
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={downloadPng}
@@ -462,17 +621,21 @@ export default function InstructorCaseGenerator() {
             >
               {pngBusy ? 'PNG保存中…' : 'PNGで保存'}
             </button>
-            <span className="text-xs text-gray-400">プレビューと同じ記号・縦横比で出力します</span>
-          </div>
-          <AudiogramPreview ref={audiogramSvgRef} right={caseData.right} left={caseData.left} />
+            <button
+              type="button"
+              onClick={copyShareLink}
+              className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs"
+            >
+              リンクコピー（補助）
+            </button>
+          </div>          <AudiogramPreview ref={audiogramSvgRef} right={caseData.right} left={caseData.left} />
           <ThresholdTable right={caseData.right} left={caseData.left} />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-            {['ティンパノメトリー', 'ART', 'DPOAE'].map((name) => (
-              <div key={name} className="border border-dashed border-gray-300 rounded-xl p-4 text-gray-400">
-                {name}（未接続）
-              </div>
-            ))}
-          </div>
+          <CompanionPreview
+            companion={companion}
+            includeTym={includeTym}
+            includeArt={includeArt}
+            includeDpoae={includeDpoae}
+          />
         </div>
       )}
     </div>

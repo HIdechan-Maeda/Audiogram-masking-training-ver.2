@@ -20,6 +20,19 @@ import OssicularDiscontinuityCases from './data/Ossicular_Discontinuity_cases.js
 import OtosclerosisCases from './data/Otosclerosis_cases.json';
 import { HEARING_DISORDERS } from './data/hearingDisorders';
 import { generateAudiogram } from './engine/generateAudiogram';
+import {
+  buildArtConfig,
+  buildSimpleTympanogramFromProfile,
+  buildDPOAEConfig,
+  generateDPOAEData,
+} from './engine/buildCompanionTests';
+import { parseLessonCaseFromSearch, materializeLessonCase } from './engine/lessonCaseShare';
+import {
+  listLessonPresets,
+  subscribeLessonPresets,
+  getLessonPreset,
+  isLessonPresetId,
+} from './engine/lessonPresetStore';
 import { preloadCaseDatabases, pickCaseFromDatabase } from './utils/caseDatabase';
 import GuidedMaskingReasoningPanel from './GuidedMaskingReasoningPanel';
 
@@ -361,633 +374,6 @@ const PRESET_DETAILS = {
   }
 };
 // ART設定を構築する関数（プリセットのAC/BC値とティンパノグラム型から）
-function buildArtConfig(presetTargets, tympanogram, disorderName = null, casePattern = null, meta = {}) {
-  const ART_NORMAL_THRESHOLDS = {
-    500: { ipsi: 80, cont: 85 },
-    1000: { ipsi: 75, cont: 80 },
-    2000: { ipsi: 80, cont: 85 }
-  };
-
-  const acThresholds = { right: {}, left: {} };
-  const bcThresholds = { right: {}, left: {} };
-  
-  // プリセットからAC/BC値を抽出（ART用の周波数: 500, 1000, 2000Hz）
-  presetTargets.forEach(target => {
-    if ([500, 1000, 2000].includes(target.freq)) {
-      const earKey = target.ear === 'R' ? 'right' : 'left';
-      if (target.transducer === 'AC') {
-        acThresholds[earKey][target.freq] = target.so ? 110 : target.dB;
-      } else if (target.transducer === 'BC') {
-        bcThresholds[earKey][target.freq] = target.so ? 110 : target.dB;
-      }
-    }
-  });
-  
-  // ティンパノグラム型とpeakPressureを取得
-  const getTympanogramType = (ear, tymp) => {
-    // 各耳のpeakComplianceとpeakPressureを個別にチェック（tymp.typeは全体の型なので、個別判定には使わない）
-    const peakCompliance = tymp?.[ear]?.peakCompliance;
-    const peak = tymp?.[ear]?.peakPressure || 0;
-    
-    // B型の判定（優先順位：peakCompliance < 0.5 または peakPressure異常）
-    // peakComplianceが非常に低い場合（0.3など、AOMのB型）はB型として判定
-    if (peakCompliance !== undefined && peakCompliance < 0.5) {
-      return 'B';
-    }
-    // 陽圧（peakPressure>50daPa）は伝音障害として扱う
-    if (peak > 50) return 'B';
-    // 陰圧が強すぎる場合もB型
-    if (peak < -150) return 'B';
-    
-    // As型（コンプライアンス低）を検出（peakComplianceが0.5以上0.8未満の場合）
-    if (peakCompliance !== undefined && peakCompliance >= 0.5 && peakCompliance < 0.8) {
-      return 'As'; // As型（耳硬化症など）
-    }
-    // Ad型（コンプライアンス増大）を検出
-    if (peakCompliance !== undefined && peakCompliance > 1.7) {
-      return 'Ad'; // Ad型（耳小骨離断など）
-    }
-    
-    return 'A';
-  };
-  
-  // 耳硬化症の場合はART消失（As型でも反射消失）
-  const isOtosclerosis = disorderName === '耳硬化症';
-  
-  const rightType = getTympanogramType('right', tympanogram);
-  const leftType = getTympanogramType('left', tympanogram);
-  
-  // 耳硬化症の場合、または伝音性難聴でAs型の場合は反射消失を示すため、B型として扱う
-  // （StapedialReflexGifコンポーネントはB型で反射消失を判定するため）
-  const getEffectiveType = (type, ear) => {
-    if (isOtosclerosis && type === 'As') {
-      return 'B'; // 耳硬化症のAs型は反射消失のため、B型として扱う
-    }
-    // 伝音性難聴でAs型の場合も反射消失（耳硬化症以外でも可能性あり）
-    if (casePattern === 'conductive' && type === 'As') {
-      return 'B'; // As型で伝音性難聴は反射消失
-    }
-    return type;
-  };
-  
-  const artConfig = {
-    right: {
-      acThresholds: acThresholds.right,
-      bcThresholds: bcThresholds.right,
-      tympanogramType: getEffectiveType(rightType, 'right'),
-      peakPressure: tympanogram?.right?.peakPressure || 0
-    },
-    left: {
-      acThresholds: acThresholds.left,
-      bcThresholds: bcThresholds.left,
-      tympanogramType: getEffectiveType(leftType, 'left'),
-      peakPressure: tympanogram?.left?.peakPressure || 0
-    }
-  };
-
-  const profiles = {
-    right: meta?.rightProfile || meta?.profile || null,
-    left: meta?.leftProfile || meta?.profile || null
-  };
-  const isOssicular = disorderName === 'CHL_OssicularDiscontinuity'
-    || disorderName === '耳小骨離断'
-    || profiles.right === 'CHL_OssicularDiscontinuity'
-    || profiles.left === 'CHL_OssicularDiscontinuity';
-
-  // AOM症例の判定（片側AOM、片側正常の場合）
-  const isAOM = disorderName === 'AOM' 
-    || disorderName === '急性中耳炎'
-    || profiles.right === 'CHL_AOM'
-    || profiles.left === 'CHL_AOM';
-  
-  // OME症例の判定
-  const isOME = disorderName === 'OME'
-    || disorderName === '滲出性中耳炎'
-    || profiles.right === 'CHL_OME'
-    || profiles.left === 'CHL_OME';
-  
-  // OMEの軽度/中程度判定（metaから取得）
-  const rightIsMildOME = meta?.rightIsMild || false;
-  const leftIsMildOME = meta?.leftIsMild || false;
-  
-  // デバッグログ
-  if (disorderName === 'AOM' || disorderName === '急性中耳炎' || profiles.right === 'CHL_AOM' || profiles.left === 'CHL_AOM') {
-    console.log('buildArtConfig: isAOM判定', {
-      disorderName,
-      profiles,
-      isAOM,
-      rightType,
-      leftType
-    });
-  }
-
-  if (isOssicular) {
-    let affectedSide = meta?.affectedSide || null;
-    if (!affectedSide) {
-      if (profiles.right === 'CHL_OssicularDiscontinuity' && profiles.left !== 'CHL_OssicularDiscontinuity') {
-        affectedSide = 'R';
-      } else if (profiles.left === 'CHL_OssicularDiscontinuity' && profiles.right !== 'CHL_OssicularDiscontinuity') {
-        affectedSide = 'L';
-      }
-    }
-
-    const freqs = [500, 1000, 2000];
-    const elevation = 15;
-
-    const ensureOverride = (earKey, key) => {
-      if (!artConfig[earKey][key]) artConfig[earKey][key] = {};
-      return artConfig[earKey][key];
-    };
-
-    const markAbsent = (earKey) => {
-      freqs.forEach(freq => {
-        ensureOverride(earKey, 'ipsilateralOverride')[freq] = 999;
-        ensureOverride(earKey, 'contralateralOverride')[freq] = 999;
-      });
-    };
-
-    const elevateContralateral = (earKey) => {
-      freqs.forEach(freq => {
-        const contBase = ART_NORMAL_THRESHOLDS[freq]?.cont ?? 85;
-        const ipsiBase = ART_NORMAL_THRESHOLDS[freq]?.ipsi ?? 80;
-        ensureOverride(earKey, 'contralateralOverride')[freq] = contBase + elevation;
-        ensureOverride(earKey, 'ipsilateralOverride')[freq] = ipsiBase;
-      });
-    };
-
-    if (affectedSide === 'R') {
-      markAbsent('right');
-      elevateContralateral('left');
-    } else if (affectedSide === 'L') {
-      markAbsent('left');
-      elevateContralateral('right');
-    } else {
-      // 影響側が不明な場合は両側を安全側にする
-      markAbsent('right');
-      markAbsent('left');
-    }
-  } else if (isAOM) {
-    // AOM症例の場合：AOM側（B型）の耳でのみ反射消失、正常側（A型）の耳では反射保持
-    const freqs = [500, 1000, 2000];
-    const elevation = 15; // CONT反射の閾値上昇量
-
-    const ensureOverride = (earKey, key) => {
-      if (!artConfig[earKey][key]) artConfig[earKey][key] = {};
-      return artConfig[earKey][key];
-    };
-
-    // AOM側（B型）の耳：IPSI/CONTともに反射消失
-    const markAbsent = (earKey) => {
-      freqs.forEach(freq => {
-        ensureOverride(earKey, 'ipsilateralOverride')[freq] = 999;
-        ensureOverride(earKey, 'contralateralOverride')[freq] = 999;
-      });
-    };
-
-    // 正常側（A型）の耳：IPSI反射あり、CONT反射は閾値上昇するも反応あり
-    const elevateContralateral = (earKey) => {
-      freqs.forEach(freq => {
-        const base = ART_NORMAL_THRESHOLDS[freq]?.cont ?? 85;
-        // CONT反射は閾値上昇するが、反応あり（999ではなく上昇した閾値を設定）
-        ensureOverride(earKey, 'contralateralOverride')[freq] = base + elevation;
-        // IPSI反射は正常閾値を明示的に設定（overrideで確実に正常反射を保証）
-        const ipsiBase = ART_NORMAL_THRESHOLDS[freq]?.ipsi ?? 80;
-        ensureOverride(earKey, 'ipsilateralOverride')[freq] = ipsiBase;
-      });
-    };
-
-    // 左右どちらがAOM側かを判定
-    const rightIsAOM = rightType === 'B' || profiles.right === 'CHL_AOM';
-    const leftIsAOM = leftType === 'B' || profiles.left === 'CHL_AOM';
-
-    if (rightIsAOM && !leftIsAOM) {
-      // Rt AOM, Lt normal
-      markAbsent('right');
-      elevateContralateral('left');
-    } else if (leftIsAOM && !rightIsAOM) {
-      // Rt normal, Lt AOM
-      markAbsent('left');
-      elevateContralateral('right');
-      // デバッグログ
-      console.log('AOM症例: Rt normal, Lt AOM');
-      console.log('artConfig.right:', JSON.stringify(artConfig.right, null, 2));
-      console.log('artConfig.left:', JSON.stringify(artConfig.left, null, 2));
-    } else if (rightIsAOM && leftIsAOM) {
-      // 両側AOM
-      markAbsent('right');
-      markAbsent('left');
-    }
-    // 両側正常の場合は何もしない（正常反射）
-  } else if (isOME) {
-    // OME症例の場合：軽度/中程度に応じて処理を分岐
-    const freqs = [500, 1000, 2000];
-    const elevation = 15; // CONT反射の閾値上昇量
-
-    const ensureOverride = (earKey, key) => {
-      if (!artConfig[earKey][key]) artConfig[earKey][key] = {};
-      return artConfig[earKey][key];
-    };
-
-    // 中程度以上（B型）の耳：IPSI/CONTともに反射消失
-    const markAbsent = (earKey) => {
-      freqs.forEach(freq => {
-        ensureOverride(earKey, 'ipsilateralOverride')[freq] = 999;
-        ensureOverride(earKey, 'contralateralOverride')[freq] = 999;
-      });
-    };
-
-    // 軽度（C型）の耳：振幅減弱するもIPSI/CONT反射（+）
-    // ART振幅減弱：閾値上昇（+15dB）するが反応あり
-    const markAttenuated = (earKey) => {
-      freqs.forEach(freq => {
-        const ipsiBase = ART_NORMAL_THRESHOLDS[freq]?.ipsi ?? 80;
-        const contBase = ART_NORMAL_THRESHOLDS[freq]?.cont ?? 85;
-        // 振幅減弱：閾値上昇（+15dB）するが反応あり（999ではなく上昇した閾値を設定）
-        ensureOverride(earKey, 'ipsilateralOverride')[freq] = ipsiBase + elevation;
-        ensureOverride(earKey, 'contralateralOverride')[freq] = contBase + elevation;
-      });
-    };
-
-    // 左右どちらが軽度/中程度かを判定
-    const rightIsMild = rightIsMildOME || rightType === 'C';
-    const leftIsMild = leftIsMildOME || leftType === 'C';
-
-    if (rightIsMild && !leftIsMild) {
-      // Rt 軽度（C型）, Lt 中程度以上（B型）
-      markAttenuated('right');
-      markAbsent('left');
-    } else if (leftIsMild && !rightIsMild) {
-      // Rt 中程度以上（B型）, Lt 軽度（C型）
-      markAbsent('right');
-      markAttenuated('left');
-    } else if (!rightIsMild && !leftIsMild) {
-      // 両側中程度以上（B型）
-      markAbsent('right');
-      markAbsent('left');
-    } else {
-      // 両側軽度（C型）：振幅減弱
-      markAttenuated('right');
-      markAttenuated('left');
-    }
-  }
-
-  // 片側伝音障害（AOM/OME/耳小骨離断以外、または疾患判定漏れ時）のフォールバック
-  const artFreqs = [500, 1000, 2000];
-  const contElevation = 15;
-  const ensureArtOverride = (earKey, key) => {
-    if (!artConfig[earKey][key]) artConfig[earKey][key] = {};
-    return artConfig[earKey][key];
-  };
-  const markAbsentEar = (earKey) => {
-    artFreqs.forEach(freq => {
-      ensureArtOverride(earKey, 'ipsilateralOverride')[freq] = 999;
-      ensureArtOverride(earKey, 'contralateralOverride')[freq] = 999;
-    });
-  };
-  const elevateNormalEar = (normalEarKey) => {
-    artFreqs.forEach(freq => {
-      const contBase = ART_NORMAL_THRESHOLDS[freq]?.cont ?? 85;
-      const ipsiBase = ART_NORMAL_THRESHOLDS[freq]?.ipsi ?? 80;
-      ensureArtOverride(normalEarKey, 'contralateralOverride')[freq] = contBase + contElevation;
-      ensureArtOverride(normalEarKey, 'ipsilateralOverride')[freq] = ipsiBase;
-    });
-  };
-  const earHasArtOverride = (earKey) => {
-    const cfg = artConfig[earKey];
-    return !!(cfg.ipsilateralOverride || cfg.contralateralOverride);
-  };
-
-  const rightIsConductive = artConfig.right.tympanogramType === 'B';
-  const leftIsConductive = artConfig.left.tympanogramType === 'B';
-
-  if (rightIsConductive && !leftIsConductive && !earHasArtOverride('right') && !earHasArtOverride('left')) {
-    markAbsentEar('right');
-    elevateNormalEar('left');
-  } else if (leftIsConductive && !rightIsConductive && !earHasArtOverride('left') && !earHasArtOverride('right')) {
-    markAbsentEar('left');
-    elevateNormalEar('right');
-  }
-
-  return artConfig;
-}
-function buildSimpleTympanogramFromProfile(profileName, meta = {}) {
-  const resolvedProfile = profileName || 'Normal';
-  const rightEarProfile = meta.rightProfile || resolvedProfile;
-  const leftEarProfile = meta.leftProfile || resolvedProfile;
-
-  const createEarConfig = (earProfile) => {
-    if (!earProfile || earProfile === 'Normal' || earProfile.startsWith('SNHL_')) {
-      return { config: { peakPressure: 0, peakCompliance: 1.1, sigma: 60 }, type: 'A' };
-    }
-    if (earProfile === 'CHL_Otosclerosis') {
-      return { config: { peakPressure: 0, peakCompliance: 0.5, sigma: 60 }, type: 'As' };
-    }
-    if (earProfile === 'CHL_OssicularDiscontinuity') {
-      const compliance = Number((Math.random() * 1 + 3).toFixed(1)); // 3.0 - 4.0 mL
-      return { config: { peakPressure: 0, peakCompliance: compliance, sigma: 30 }, type: 'Ad' }; // sigmaを小さくしてより尖らせる
-    }
-    if (earProfile === 'CHL_AOM') {
-      // 急性中耳炎：ピークは +50〜+200 daPa
-      const peak = 50 + Math.round(Math.random() * 150);
-      return { config: { peakPressure: peak, peakCompliance: 0.3, sigma: 80 }, type: 'B' };
-    }
-    if (earProfile === 'CHL_OME') {
-      return { config: { peakPressure: -150, peakCompliance: 1.0, sigma: 60 }, type: 'C' };
-    }
-    return { config: { peakPressure: 0, peakCompliance: 1.1, sigma: 60 }, type: 'A' };
-  };
-
-  let rightResult = createEarConfig(rightEarProfile);
-  let leftResult = createEarConfig(leftEarProfile);
-
-  if (resolvedProfile === 'CHL_OssicularDiscontinuity' && !meta.rightProfile && !meta.leftProfile && meta.affectedSide) {
-    if (meta.affectedSide === 'R') {
-      rightResult = createEarConfig('CHL_OssicularDiscontinuity');
-      leftResult = createEarConfig('Normal');
-    } else if (meta.affectedSide === 'L') {
-      rightResult = createEarConfig('Normal');
-      leftResult = createEarConfig('CHL_OssicularDiscontinuity');
-    }
-  }
-
-  let right = rightResult.config;
-  let left = leftResult.config;
-
-  if (right.peakCompliance === left.peakCompliance && right.peakPressure === left.peakPressure) {
-    left = {
-      ...left,
-      peakPressure: left.peakPressure - 12,
-      peakCompliance: Number(Math.max(0.2, left.peakCompliance * 1.05).toFixed(2)),
-    };
-  }
-
-  const clampAdCompliance = (earConfig, earType) => {
-    if (earType !== 'Ad' || !earConfig || typeof earConfig.peakCompliance !== 'number') {
-      return earConfig;
-    }
-    const capped = Math.min(earConfig.peakCompliance, 4.0);
-    if (capped === earConfig.peakCompliance) {
-      return earConfig;
-    }
-    return {
-      ...earConfig,
-      peakCompliance: Number(capped.toFixed(2)),
-    };
-  };
-
-  right = clampAdCompliance(right, rightResult.type);
-  left = clampAdCompliance(left, leftResult.type);
-
-  const overallType = rightResult.type === leftResult.type
-    ? rightResult.type
-    : (rightResult.type !== 'A' ? rightResult.type : leftResult.type);
-
-  return { type: overallType, right, left };
-}
-// DPOAE設定を構築する関数（プリセットのAC値とティンパノグラム型から）
-function buildDPOAEConfig(presetTargets, tympanogram, meta = {}) {
-  // DPOAEの周波数: [1, 2, 3, 4, 6, 8] kHz
-  const dpoaeFrequencies = [1, 2, 3, 4, 6, 8];
-  
-  // オージオグラムのAC値を抽出（Hz単位で保存）
-  const audiogramAC = { right: {}, left: {} };
-  presetTargets.forEach(target => {
-    if (target.transducer === 'AC') {
-      const earKey = target.ear === 'R' ? 'right' : 'left';
-      audiogramAC[earKey][target.freq] = target.so ? 110 : target.dB;
-    }
-  });
-  
-  // DPOAE周波数ごとにAC値を設定
-  const acThresholds = { right: {}, left: {} };
-  dpoaeFrequencies.forEach(dpoaeFreq => {
-    ['right', 'left'].forEach(ear => {
-      const earKey = ear;
-      let acValue;
-      
-      if (dpoaeFreq === 1) {
-        // DPOAE 1kHz → オージオグラム 1kHz
-        acValue = audiogramAC[earKey][1000];
-      } else if (dpoaeFreq === 2) {
-        // DPOAE 2kHz → オージオグラム 2kHz
-        acValue = audiogramAC[earKey][2000];
-      } else if (dpoaeFreq === 3) {
-        // DPOAE 3kHz → オージオグラム 2kHzと4kHzのAC平均
-        const ac2k = audiogramAC[earKey][2000];
-        const ac4k = audiogramAC[earKey][4000];
-        if (ac2k !== undefined && ac4k !== undefined) {
-          acValue = Math.round((ac2k + ac4k) / 2);
-        } else if (ac4k !== undefined) {
-          acValue = ac4k; // フォールバック：4kHzのみ
-        } else if (ac2k !== undefined) {
-          acValue = ac2k; // フォールバック：2kHzのみ
-        }
-      } else if (dpoaeFreq === 4) {
-        // DPOAE 4kHz → オージオグラム 4kHz
-        acValue = audiogramAC[earKey][4000];
-      } else if (dpoaeFreq === 6) {
-        // DPOAE 6kHz → オージオグラム 4kHzと8kHzのAC平均
-        const ac4k = audiogramAC[earKey][4000];
-        const ac8k = audiogramAC[earKey][8000];
-        if (ac4k !== undefined && ac8k !== undefined) {
-          acValue = Math.round((ac4k + ac8k) / 2);
-        } else if (ac8k !== undefined) {
-          acValue = ac8k; // フォールバック：8kHzのみ
-        } else if (ac4k !== undefined) {
-          acValue = ac4k; // フォールバック：4kHzのみ
-        }
-      } else if (dpoaeFreq === 8) {
-        // DPOAE 8kHz → オージオグラム 8kHz
-        acValue = audiogramAC[earKey][8000];
-      }
-      
-      if (acValue !== undefined) {
-        acThresholds[earKey][dpoaeFreq] = acValue;
-      }
-    });
-  });
-  
-  // ティンパノグラム型を取得（Ad/As も伝音扱いとして 'B' に寄せる）
-  // 各耳ごとに個別に判定（片側AOM、片側正常の場合に対応）
-  const getTympanogramType = (ear, tymp) => {
-    // 各耳ごとのpeakComplianceとpeakPressureを優先的に確認
-    const peakCompliance = tymp?.[ear]?.peakCompliance;
-    const peak = tymp?.[ear]?.peakPressure || 0;
-    
-    // B型の判定（優先順位：peakCompliance < 0.5 または peakPressure異常）
-    // peakComplianceが非常に低い場合（0.3など、AOMのB型）はB型として判定
-    if (peakCompliance !== undefined && peakCompliance < 0.5) {
-      return 'B';
-    }
-    // 陽圧（peakPressure>50daPa）は伝音障害として扱う
-    if (peak > 50) return 'B';
-    // 強い陰圧（peakPressure<-150）はB型
-    if (peak < -150) return 'B';
-    
-    // C型の判定（OME軽度：peakPressure: -150, peakCompliance: 1.0）
-    // peakPressureが-150付近でpeakComplianceが1.0付近ならC型
-    if (peak <= -150 && peak >= -200 && peakCompliance !== undefined && peakCompliance >= 0.8 && peakCompliance <= 1.2) {
-      return 'C';
-    }
-    
-    // As型（コンプライアンス低）を検出（peakComplianceが0.5以上0.8未満の場合）
-    if (peakCompliance !== undefined && peakCompliance >= 0.5 && peakCompliance < 0.8) {
-      return 'B'; // As型も伝音障害としてB型扱い
-    }
-    // Ad型（コンプライアンス増大）を検出
-    if (peakCompliance !== undefined && peakCompliance > 1.7) {
-      return 'B'; // Ad型も伝音障害としてB型扱い
-    }
-    
-    // 全体のtypeプロパティは参考程度（各耳ごとの判定を優先）
-    if (tymp?.type === 'B' && peakCompliance === undefined && peak === 0) {
-      // 全体がB型で、各耳の情報がない場合のみ全体のtypeを使用
-      return 'B';
-    }
-    if (tymp?.type === 'C' && peakCompliance === undefined && peak === 0) {
-      // 全体がC型で、各耳の情報がない場合のみ全体のtypeを使用
-      return 'C';
-    }
-    
-    return 'A';
-  };
-  
-  const tympanogramType = {
-    right: getTympanogramType('right', tympanogram),
-    left: getTympanogramType('left', tympanogram)
-  };
-  
-  // OMEの軽度/中程度情報を追加
-  const rightIsMildOME = meta?.rightIsMild || false;
-  const leftIsMildOME = meta?.leftIsMild || false;
-  
-  return {
-    acThresholds,
-    tympanogramType,
-    rightIsMildOME,
-    leftIsMildOME
-  };
-}
-// DPOAEデータを生成する関数（症例ごとに固定値）
-function generateDPOAEData(dpoaeConfig, caseId = '') {
-  const frequencies = [1, 2, 3, 4, 6, 8];
-  
-  // ノイズフロアの基本値（周波数ごとの範囲の中間値）
-  const noiseFloorBase = {
-    1: 17,   // 12-22 の中央値
-    2: 15,   // 10-20 の中央値
-    3: 13,   // 8-18 の中央値
-    4: 11.5, // 7-16 の中央値
-    6: 10,   // 6-14 の中央値
-    8: 10    // 6-14 の中央値
-  };
-  
-  // デターミニスティックなノイズフロア（症例IDと周波数、耳に基づく固定変動）
-  // 左右で異なるノイズフロア値を生成（より大きな幅を持つ）
-  const getNoiseFloor = (freq, ear) => {
-    const base = noiseFloorBase[freq];
-    // 症例IDと周波数、耳に基づく固定変動パターン（左右で異なる変動を加える）
-    // 右耳と左耳で異なるseedを使用して、左右で異なるノイズフロア値を生成
-    const earMultiplier = ear === 'right' ? 1 : 5; // 左右で異なるパターンを作るための係数（より大きく）
-    const seed = (caseId.charCodeAt(0) || 65) * 100 + freq * 10 + earMultiplier;
-    // 左右で異なる変動パターン（右耳はsin系、左耳はcos系に偏らせる）
-    // 変動幅を大きくする（±3-4dB程度）
-    const sinVariation = Math.sin(seed * 0.1) * 3.5;
-    const cosVariation = Math.cos(seed * 0.15) * 2.5;
-    const variation = ear === 'right' 
-      ? sinVariation + cosVariation * 0.6  // 右耳のパターン
-      : cosVariation + sinVariation * 0.6; // 左耳のパターン（異なるパターン、より大きな差）
-    const rangeMin = { 1: 12, 2: 10, 3: 8, 4: 7, 6: 6, 8: 6 }[freq];
-    const rangeMax = { 1: 22, 2: 20, 3: 18, 4: 16, 6: 14, 8: 14 }[freq];
-    return Math.max(rangeMin, Math.min(rangeMax, base + variation));
-  };
-  
-  const generateEarData = (ear) => {
-    const acThresholds = dpoaeConfig.acThresholds[ear];
-    const tympanogramType = dpoaeConfig.tympanogramType[ear];
-    
-    return frequencies.map((freq, index) => {
-      const acThreshold = acThresholds[freq];
-      const noiseFloor = getNoiseFloor(freq, ear);
-      
-      // ルール判定（優先順位順）
-      // 【最重要】伝音障害（B型）がある場合は、AC閾値に関係なく全周波数でREFERを最優先
-      // 1. 伝音障害（ティンパノB型）→ 全周波数でSNR < 2dB（REFER）
-      // 2. OME軽度（C型）でAC <= 20dB → SNR >= 6dB（正常/PASS）
-      // 3. OME（C型またはB型）でAC > 20dB → SNR < 2dB（B型）またはSNR < 6dB（C型軽度）
-      // 4. AC ≥ 35dB（感音性難聴など）→ SNR < 2dB
-      // 5. それ以外 → 正常（SNR 6〜12dB、確実に6以上になるように）
-      
-      // OME軽度/中程度の判定
-      const isMildOME = (ear === 'right' ? dpoaeConfig.rightIsMildOME : dpoaeConfig.leftIsMildOME) || false;
-      const isOME = tympanogramType === 'C' || tympanogramType === 'B';
-      
-      let snr;
-      // 【最優先】伝音障害（B型）がある場合は、AC閾値に関係なく全周波数でREFER
-      if (tympanogramType === 'B') {
-        // B型（伝音障害）→ 全周波数でSNR < 2dB（REFER）
-        // AC閾値に関係なく、伝音障害がある場合は必ずREFER
-        const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
-        snr = 0.5 + (Math.sin(seed * 0.1) * 0.5 + Math.cos(seed * 0.2) * 0.3); // 0.5〜1.5dB程度の固定値
-      } else if (tympanogramType === 'C' && isMildOME && acThreshold !== undefined && acThreshold <= 20) {
-        // OME軽度（C型）でAC <= 20dB → SNR >= 6dB（正常/PASS）
-        // 確実に6dB以上になるように、最小値を6.5dBに設定
-        const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
-        // SNR 6.5〜12dBの範囲で生成（確実に6以上になるように）
-        const baseSNR = 8; // 基本SNR 8dB
-        const earOffset = ear === 'right' 
-          ? Math.sin(seed * 0.05) * 2.5  // 右耳の変動幅を大きく
-          : Math.cos(seed * 0.05) * 2.5; // 左耳の変動幅を大きく
-        snr = Math.max(6.5, Math.min(12, baseSNR + earOffset)); // 最小値を6.5dBに設定して確実に6dB以上にする
-      } else if (isOME && acThreshold !== undefined && acThreshold > 20) {
-        // OME（C型またはB型）でAC > 20dB → REFER
-        if (tympanogramType === 'C' && isMildOME) {
-          // OME軽度（C型）でAC > 20dB → SNR < 6dB（6dB未満でREFER）
-          const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
-          snr = 2 + (Math.sin(seed * 0.1) * 2 + Math.cos(seed * 0.2) * 1.5); // 2〜5.5dB程度の固定値
-          snr = Math.max(2, Math.min(5.5, snr)); // 6dB未満に制限（REFERになるように）
-        } else {
-          // OME中程度以上（B型）でAC > 20dB → SNR < 2dB（ただし、B型は既に上で処理済み）
-          const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
-          snr = 0.5 + (Math.sin(seed * 0.1) * 0.5 + Math.cos(seed * 0.2) * 0.3); // 0.5〜1.5dB程度の固定値
-        }
-      } else if (acThreshold !== undefined && acThreshold >= 35) {
-        // AC >= 35dB（感音性難聴など）→ SNR < 2dB
-        const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
-        snr = 0.5 + (Math.sin(seed * 0.1) * 0.5 + Math.cos(seed * 0.2) * 0.3); // 0.5〜1.5dB程度の固定値
-      } else {
-        // 正常: SNR 6〜12dB（固定値で右左に差、確実に6以上になるように）
-        // 症例と周波数に基づく固定値
-        const seed = (caseId.charCodeAt(0) || 65) * 1000 + freq * 100 + index * 10 + (ear === 'right' ? 1 : 2);
-        // 右耳と左耳でより大きな差が出るように（±2-3dB程度）
-        const baseSNR = 8; // 基本SNR 8dB
-        // 左右で異なるオフセット（右耳はsin系、左耳はcos系でより大きな差）
-        const earOffset = ear === 'right' 
-          ? Math.sin(seed * 0.05) * 2.5  // 右耳の変動幅を大きく
-          : Math.cos(seed * 0.05) * 2.5; // 左耳の変動幅を大きく
-        // SNRが確実に6以上になるように（最小値6dB、最大値12dB程度）
-        snr = Math.max(6, Math.min(12, baseSNR + earOffset));
-      }
-      
-      const dpoaeLevel = noiseFloor + snr;
-      
-      return Math.max(0, Math.min(30, dpoaeLevel)); // 0〜30dBの範囲にクランプ
-    });
-  };
-  
-  // ノイズフロアデータも生成（SNR計算用）
-  const noiseFloorData = {
-    right: frequencies.map((freq) => getNoiseFloor(freq, 'right')),
-    left: frequencies.map((freq) => getNoiseFloor(freq, 'left'))
-  };
-  
-  return {
-    right: generateEarData('right'),
-    left: generateEarData('left'),
-    noiseFloor: noiseFloorData
-  };
-}
-
 function buildTargetsFromPreset(preset){
   return preset.targets.map(t => ({...t}));
 }
@@ -1197,6 +583,7 @@ export default function AudiogramMaskingMVP() {
       loadStudentProgress(currentStudentId).catch(err => {
         console.warn('進捗データの自動読み込みエラー:', err);
       });
+      setLessonPresets(listLessonPresets());
     }
   }, [isAuthenticated, currentStudentId]); // isAuthenticatedとcurrentStudentIdが変更された時のみ実行
 
@@ -1214,12 +601,22 @@ export default function AudiogramMaskingMVP() {
   // Preset targets (secret answer)
   const [targets, setTargets] = useState([]);
   const [selectedPreset, setSelectedPreset] = useState('A');
+  const [lessonPresets, setLessonPresets] = useState(() => listLessonPresets());
   const PRESET_KEYS = ['A','B','C','D','E','F','G','H'];
   useEffect(() => {
-    if (!PRESET_KEYS.includes(selectedPreset)) {
+    const allowed = PRESET_KEYS.includes(selectedPreset)
+      || selectedPreset === 'Lesson'
+      || selectedPreset === 'Custom'
+      || isLessonPresetId(selectedPreset);
+    if (!allowed) {
       setSelectedPreset('A');
     }
   }, [selectedPreset]);
+
+  useEffect(() => {
+    setLessonPresets(listLessonPresets());
+    return subscribeLessonPresets(setLessonPresets);
+  }, []);
   
   // CSV症例データベースを事前に読み込む（アプリ起動時）
   useEffect(() => {
@@ -4120,6 +3517,53 @@ ${episodeHint ? `
   const [crossHearingWarning, setCrossHearingWarning] = useState(true); // クロスヒアリング警告のON/OFF
   const [blinkOn, setBlinkOn] = useState(true);
 
+  // 講師共有リンク（?lesson=1&seed=...）から症例を読み込む（補助）
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const spec = parseLessonCaseFromSearch(window.location.search);
+    if (!spec) return;
+    try {
+      const { targets: lessonTargets, caseInfo } = materializeLessonCase(spec, { caseId: '教材' });
+      setPoints([]);
+      setTargets(lessonTargets);
+      setSelectedPreset('Lesson');
+      setEar('R');
+      setTrans('AC');
+      setLevel(0);
+      setMaskLevel(-15);
+      setFreq(1000);
+      setShowAnswer(false);
+      setShowAiAnswer(false);
+      setCurrentCaseInfo(caseInfo);
+      setCustomPresetDetails(caseInfo);
+      setRandomToast('✅ 教材症例を読み込みました');
+      setTimeout(() => setRandomToast(''), 2500);
+    } catch (err) {
+      console.error('教材症例の読み込みに失敗', err);
+      window.alert('教材症例の読み込みに失敗しました。リンクを確認してください。');
+    }
+  }, []);
+
+  const applyLessonPresetEntry = (entry) => {
+    if (!entry?.spec) return false;
+    const { targets: lessonTargets, caseInfo } = materializeLessonCase(entry.spec, {
+      caseId: entry.label || entry.id,
+    });
+    setPoints([]);
+    setTargets(lessonTargets);
+    setSelectedPreset(entry.id);
+    setEar('R');
+    setTrans('AC');
+    setLevel(0);
+    setMaskLevel(-15);
+    setFreq(1000);
+    setShowAnswer(false);
+    setShowAiAnswer(false);
+    setCurrentCaseInfo(caseInfo);
+    setCustomPresetDetails(caseInfo);
+    return true;
+  };
+
   // 現在位置フラッシュ用（点滅カーソル）
   const [cursorBlinkOn, setCursorBlinkOn] = useState(true);
   const [cursorBlinkEnabled, setCursorBlinkEnabled] = useState(true);
@@ -5417,7 +4861,7 @@ ${targets.map((target, index) => {
           </div>
         )}
         {/* DPOAE Modal - プリセット症例用 */}
-        {showDPOAE && currentCaseInfo?.dpoaeConfig && currentCaseInfo?.caseId !== 'AI生成' && (
+        {showDPOAE && currentCaseInfo?.dpoaeConfig && currentCaseInfo?.caseId !== 'AI生成' && !currentCaseInfo?.isLessonCase && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-2xl shadow-lg p-6 max-w-[95vw] w-full mx-4 max-h-[95vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
@@ -5468,14 +4912,14 @@ ${targets.map((target, index) => {
           </div>
         )}
 
-        {/* DPOAE Modal - 臨床症例生成用 */}
-        {showDPOAE && currentCaseInfo?.dpoaeConfig && currentCaseInfo?.caseId === 'AI生成' && (
+        {/* DPOAE Modal - 臨床症例生成用 / 教材症例 */}
+        {showDPOAE && currentCaseInfo?.dpoaeConfig && (currentCaseInfo?.caseId === 'AI生成' || currentCaseInfo?.isLessonCase) && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-2xl shadow-lg p-6 max-w-[95vw] w-full mx-4 max-h-[95vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-2xl font-bold text-orange-800">DPOAE実施</h3>
-                  <p className="text-sm text-gray-600 mt-1">臨床症例生成</p>
+                  <p className="text-sm text-gray-600 mt-1">{currentCaseInfo?.isLessonCase ? (currentCaseInfo?.caseId || '教材症例') : '臨床症例生成'}</p>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -5491,8 +4935,11 @@ ${targets.map((target, index) => {
                   if (!currentCaseInfo?.dpoaeConfig) {
                     return <div className="text-red-600 p-4">DPOAE設定が見つかりません</div>;
                   }
-                  const caseId = 'AI生成';
-                  const dpoaeData = generateDPOAEData(currentCaseInfo.dpoaeConfig, caseId);
+                  const caseId = currentCaseInfo?.isLessonCase
+                    ? `seed-${currentCaseInfo?.meta?.seed ?? ''}`
+                    : 'AI生成';
+                  const dpoaeData = currentCaseInfo?.dpoaeData
+                    || generateDPOAEData(currentCaseInfo.dpoaeConfig, caseId);
                   // ウィンドウ幅に応じて適応的にサイズを調整（最小幅1100px）
                   const containerWidth = Math.max(1100, window.innerWidth * 0.9);
                   return (
@@ -5523,9 +4970,28 @@ ${targets.map((target, index) => {
         <div className="bg-white rounded-2xl shadow p-4">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-gray-600">症例プリセット</span>
-            <select className="border rounded-xl px-2 py-1 text-sm" value={selectedPreset} onChange={(e)=> {
+            <select
+              className="border rounded-xl px-2 py-1 text-sm"
+              value={selectedPreset}
+              onFocus={() => setLessonPresets(listLessonPresets())}
+              onClick={() => setLessonPresets(listLessonPresets())}
+              onChange={(e)=> {
               const newPreset = e.target.value;
               setSelectedPreset(newPreset);
+              if (isLessonPresetId(newPreset)) {
+                const entry = getLessonPreset(newPreset) || lessonPresets.find((p) => p.id === newPreset);
+                if (entry) {
+                  try {
+                    applyLessonPresetEntry(entry);
+                    setPresetToast(`${entry.label}を読み込みました`);
+                    setTimeout(()=> setPresetToast(''), 1200);
+                  } catch (err) {
+                    console.error(err);
+                    alert('教材症例の読み込みに失敗しました');
+                  }
+                }
+                return;
+              }
               // プリセット症例を選択した場合は臨床症例生成の詳細をクリア
               setCustomPresetDetails(null);
               // 選択と同時に正答用ターゲット（PTA）を反映（LOADを押さないと更新されない問題の修正）
@@ -5555,13 +5021,67 @@ ${targets.map((target, index) => {
               <option value="F">症例F</option>
               <option value="G">症例G</option>
               <option value="H">症例H</option>
+              {lessonPresets.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+              {selectedPreset === 'Lesson' && <option value="Lesson">教材症例（リンク）</option>}
             </select>
+            {lessonPresets.length === 0 && (
+              <span className="text-xs text-amber-700">教材なし（講師画面で生成→「OK（学生プリセットへ登録）」）</span>
+            )}
             <button 
               className={`px-3 py-2 rounded-xl text-white text-sm flex items-center gap-2 ${
                 isLoadingPreset ? 'bg-teal-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700'
               }`} 
               onClick={async ()=>{
                 if (isLoadingPreset) return;
+                if (isLessonPresetId(selectedPreset)) {
+                  const entry = getLessonPreset(selectedPreset) || lessonPresets.find((p) => p.id === selectedPreset);
+                  if (!entry) {
+                    alert('教材が見つかりません。講師画面で再登録してください。');
+                    return;
+                  }
+                  setIsLoadingPreset(true);
+                  try {
+                    applyLessonPresetEntry(entry);
+                    setPresetToast(`${entry.label}をロードしました`);
+                  } catch (err) {
+                    console.error(err);
+                    alert('教材症例の再読み込みに失敗しました');
+                  }
+                  setIsLoadingPreset(false);
+                  setTimeout(()=> setPresetToast(''), 1200);
+                  return;
+                }
+                if (selectedPreset === 'Lesson') {
+                  const spec = parseLessonCaseFromSearch(window.location.search);
+                  if (!spec) {
+                    alert('教材リンクが見つかりません。講師から共有されたURLを開いてください。');
+                    return;
+                  }
+                  setIsLoadingPreset(true);
+                  try {
+                    const { targets: lessonTargets, caseInfo } = materializeLessonCase(spec, { caseId: '教材' });
+                    setPoints([]);
+                    setTargets(lessonTargets);
+                    setCurrentCaseInfo(caseInfo);
+                    setCustomPresetDetails(caseInfo);
+                    setShowAiAnswer(false);
+                    setShowAnswer(false);
+                    setEar('R');
+                    setTrans('AC');
+                    setLevel(0);
+                    setMaskLevel(-15);
+                    setFreq(1000);
+                    setPresetToast('教材症例をロードしました');
+                  } catch (err) {
+                    console.error(err);
+                    alert('教材症例の再読み込みに失敗しました');
+                  }
+                  setIsLoadingPreset(false);
+                  setTimeout(()=> setPresetToast(''), 1200);
+                  return;
+                }
                 
                 setIsLoadingPreset(true);
                 setPresetToast(`症例${selectedPreset}を読み込み中…`);
@@ -5611,13 +5131,13 @@ ${targets.map((target, index) => {
             {/* 症例情報（プリセット）＋検査ボタン（Tym、ART、DPOAEの順） */}
             <button
               onClick={() => {
-                if (currentCaseInfo && currentCaseInfo.caseId && currentCaseInfo.caseId !== 'AI生成') {
+                if (currentCaseInfo?.isLessonCase || (currentCaseInfo?.caseId && currentCaseInfo.caseId !== 'AI生成')) {
                   setShowCaseInfoModal(true);
                 } else {
                   alert('症例をLOADしてください');
                 }
               }}
-              className={`px-3 py-2 rounded-xl text-white text-sm flex items-center gap-2 ${currentCaseInfo && currentCaseInfo.caseId && currentCaseInfo.caseId !== 'AI生成' ? 'bg-gray-700 hover:bg-gray-800' : 'bg-gray-300 cursor-not-allowed'}`}
+              className={`px-3 py-2 rounded-xl text-white text-sm flex items-center gap-2 ${currentCaseInfo && (currentCaseInfo.isLessonCase || (currentCaseInfo.caseId && currentCaseInfo.caseId !== 'AI生成')) ? 'bg-gray-700 hover:bg-gray-800' : 'bg-gray-300 cursor-not-allowed'}`}
               title="症例情報を表示"
             >
               📝 症例情報
