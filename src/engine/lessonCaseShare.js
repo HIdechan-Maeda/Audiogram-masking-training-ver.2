@@ -127,7 +127,13 @@ export function materializeLessonCase(spec, options = {}) {
   const genderLabel = meta.sex === 'Male' ? '男性' : meta.sex === 'Female' ? '女性' : '';
   const isBuiltin = Boolean(options.builtin);
   const historyLines = Array.isArray(options.history) ? options.history.filter(Boolean) : [];
-  const historyText = historyLines.length > 0 ? historyLines.join('\n') : '';
+  const chiefComplaint = isBuiltin
+    ? (historyLines[0] || '課題シートの病歴を参照してください。')
+    : '（教材症例）講師指定の症例です';
+  // 主訴と重複しないよう、2段落目以降だけを病歴にする
+  const historyText = isBuiltin
+    ? historyLines.slice(1).join('\n')
+    : '教材症例（seed 固定）。課題の指示に従って検査を進めてください。';
 
   // 学生向けには診断名・プロファイル名を出さない（課題のネタバレ防止）
   const caseInfo = {
@@ -141,12 +147,8 @@ export function materializeLessonCase(spec, options = {}) {
     disorderLabel: isBuiltin ? '' : (PROFILE_LABELS[profileName] || profileName),
     rightProfile: meta.rightProfile,
     leftProfile: meta.leftProfile,
-    chiefComplaint: isBuiltin
-      ? (historyLines[0] || '課題シートの病歴を参照してください。')
-      : '（教材症例）講師指定の症例です',
-    history: isBuiltin
-      ? (historyText || '課題シートの病歴を参照してください。')
-      : `教材症例（seed 固定）。課題の指示に従って検査を進めてください。`,
+    chiefComplaint,
+    history: historyText || undefined,
     otoscopy: '教材用症例のため省略',
     // 診断・学習ポイントは学生画面に出さない
     explanation: undefined,
