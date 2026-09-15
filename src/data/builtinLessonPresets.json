@@ -1,0 +1,34 @@
+[
+  {
+    "id": "case01",
+    "label": "症例1",
+    "diagnosis": "両側滲出性中耳炎",
+    "spec": {
+      "ageGroup": "30s",
+      "sex": "Female",
+      "profile": "CHL_OME",
+      "severity": 1,
+      "affectedSide": null,
+      "seed": 4101,
+      "includeTym": true,
+      "includeArt": true,
+      "includeDpoae": true
+    }
+  },
+  {
+    "id": "case02",
+    "label": "症例2",
+    "diagnosis": "メニエール病",
+    "spec": {
+      "ageGroup": "40s",
+      "sex": "Female",
+      "profile": "SNHL_Meniere",
+      "severity": 2,
+      "affectedSide": "R",
+      "seed": 644592910,
+      "includeTym": true,
+      "includeArt": true,
+      "includeDpoae": true
+    }
+  }
+]

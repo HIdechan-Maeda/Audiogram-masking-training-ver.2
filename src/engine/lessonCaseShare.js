@@ -98,7 +98,7 @@ export function buildLessonCaseUrl(spec, origin = (typeof window !== 'undefined'
 /**
  * Deterministically materialize audiogram + companion tests from a lesson spec.
  * @param {LessonCaseSpec} spec
- * @param {{ caseId?: string }} [opts]
+ * @param {{ caseId?: string, diagnosis?: string, builtin?: boolean }} [options]
  */
 export function materializeLessonCase(spec, options = {}) {
   const genOpts = {
@@ -125,6 +125,8 @@ export function materializeLessonCase(spec, options = {}) {
   const casePattern = PROFILE_CASE_PATTERN[profileName] || 'sensorineural';
   const ageLabel = meta.ageGroup || spec.ageGroup;
   const genderLabel = meta.sex === 'Male' ? '男性' : meta.sex === 'Female' ? '女性' : '';
+  const disorderLabel = options.diagnosis || PROFILE_LABELS[profileName] || profileName;
+  const isBuiltin = Boolean(options.builtin);
 
   const caseInfo = {
     caseId: options.caseId || '教材',
@@ -134,13 +136,19 @@ export function materializeLessonCase(spec, options = {}) {
     age: ageLabel,
     ageGroup: ageLabel,
     disorderType: profileName,
-    disorderLabel: PROFILE_LABELS[profileName] || profileName,
+    disorderLabel,
     rightProfile: meta.rightProfile,
     leftProfile: meta.leftProfile,
-    chiefComplaint: '（教材症例）講師指定の症例です',
-    history: `seed=${meta.seed} / ${PROFILE_LABELS[profileName] || profileName} / 程度${meta.severity}`,
+    chiefComplaint: isBuiltin
+      ? `（臨床推論課題）${disorderLabel}`
+      : '（教材症例）講師指定の症例です',
+    history: isBuiltin
+      ? `臨床推論課題の同梱症例（${options.caseId || ''}）。課題シートと同じ生成条件です。`
+      : `seed=${meta.seed} / ${PROFILE_LABELS[profileName] || profileName} / 程度${meta.severity}`,
     otoscopy: '教材用症例のため省略',
-    explanation: '講師が登録した教材症例です。オージオグラムと併用検査は同一 seed から導出されています。',
+    explanation: isBuiltin
+      ? 'teaching/cases と同条件の同梱症例です。オージオグラムと併用検査は同一 seed から導出されます。'
+      : '講師が登録した教材症例です。オージオグラムと併用検査は同一 seed から導出されています。',
     tympanogram: companion.tympanogram,
     artConfig: companion.artConfig,
     dpoaeConfig: companion.dpoaeConfig,

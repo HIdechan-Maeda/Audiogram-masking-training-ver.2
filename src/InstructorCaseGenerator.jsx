@@ -2,7 +2,7 @@ import React, { forwardRef, useMemo, useRef, useState } from 'react';
 import { generateAudiogram, EngineConstants } from './engine/generateAudiogram';
 import { buildCompanionBundle } from './engine/buildCompanionTests';
 import { buildLessonCaseUrl, lessonSpecFromGenerated } from './engine/lessonCaseShare';
-import { publishLessonPreset, listLessonPresets, deleteLessonPreset } from './engine/lessonPresetStore';
+import { publishLessonPreset, listPublishedLessonPresets, deleteLessonPreset } from './engine/lessonPresetStore';
 import { buildTeachingCaseExport, downloadJsonFile } from './engine/exportTeachingCase';
 import TympanogramGif from './TympanogramGif';
 import StapedialReflexGif from './StapedialReflexGif';
@@ -420,7 +420,7 @@ export default function InstructorCaseGenerator() {
   const [includeDpoae, setIncludeDpoae] = useState(true);
   const [pngBusy, setPngBusy] = useState(false);
   const [shareStatus, setShareStatus] = useState('');
-  const [publishedList, setPublishedList] = useState(() => listLessonPresets());
+  const [publishedList, setPublishedList] = useState(() => listPublishedLessonPresets());
   const [showTym, setShowTym] = useState(false);
   const [showArt, setShowArt] = useState(false);
   const [showDpoae, setShowDpoae] = useState(false);
@@ -429,7 +429,7 @@ export default function InstructorCaseGenerator() {
 
   const needsSide = UNILATERAL.has(profile);
 
-  const refreshPublished = () => setPublishedList(listLessonPresets());
+  const refreshPublished = () => setPublishedList(listPublishedLessonPresets());
 
   const downloadPng = async () => {
     if (!audiogramSvgRef.current || !caseData) return;
@@ -668,7 +668,7 @@ export default function InstructorCaseGenerator() {
 
       {publishedList.length > 0 && (
         <div className="border border-indigo-100 rounded-xl p-3 bg-indigo-50 mb-6">
-          <div className="text-sm font-medium text-indigo-900 mb-2">登録済み（学生プリセットに表示中）</div>
+          <div className="text-sm font-medium text-indigo-900 mb-2">追加登録（講師OK分。症例1・2は同梱）</div>
           <ul className="space-y-1">
             {publishedList.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-2 text-xs text-indigo-950">

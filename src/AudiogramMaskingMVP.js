@@ -3548,6 +3548,8 @@ ${episodeHint ? `
     if (!entry?.spec) return false;
     const { targets: lessonTargets, caseInfo } = materializeLessonCase(entry.spec, {
       caseId: entry.label || entry.id,
+      diagnosis: entry.diagnosis,
+      builtin: entry.builtin,
     });
     setPoints([]);
     setTargets(lessonTargets);
@@ -5022,13 +5024,12 @@ ${targets.map((target, index) => {
               <option value="G">症例G</option>
               <option value="H">症例H</option>
               {lessonPresets.map((p) => (
-                <option key={p.id} value={p.id}>{p.label}</option>
+                <option key={p.id} value={p.id}>
+                  {p.diagnosis ? `${p.label}（${p.diagnosis}）` : p.label}
+                </option>
               ))}
               {selectedPreset === 'Lesson' && <option value="Lesson">教材症例（リンク）</option>}
             </select>
-            {lessonPresets.length === 0 && (
-              <span className="text-xs text-amber-700">教材なし（講師画面で生成→「OK（学生プリセットへ登録）」）</span>
-            )}
             <button 
               className={`px-3 py-2 rounded-xl text-white text-sm flex items-center gap-2 ${
                 isLoadingPreset ? 'bg-teal-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700'

@@ -1,7 +1,11 @@
 /**
  * Instructor-published lesson presets shown in the student preset dropdown.
  * Storage: localStorage (same origin / same browser). Cross-device → Supabase later.
+ *
+ * Built-in 症例1 / 症例2 (teaching/cases) are always merged into the student list.
  */
+
+import { getBuiltinLessonPresets } from './builtinLessonPresets';
 
 const STORAGE_KEY = 'audioscope_edu_lesson_presets';
 const CHANGE_EVENT = 'audioscope-lesson-presets-changed';
@@ -26,13 +30,30 @@ function writeAll(list) {
   }
 }
 
-/** @returns {{ id: string, label: string, spec: object, createdAt: string }[]} */
-export function listLessonPresets() {
-  return readAll().slice().sort((a, b) => {
-    const na = Number(String(a.id).replace(/^L/, '')) || 0;
-    const nb = Number(String(b.id).replace(/^L/, '')) || 0;
-    return na - nb;
+function sortLessonPresets(list) {
+  return list.slice().sort((a, b) => {
+    const rank = (p) => {
+      if (p.builtin || /^case\d+$/.test(p.id)) {
+        return Number(String(p.id).replace(/^case/, '')) || 0;
+      }
+      return 1000 + (Number(String(p.id).replace(/^L/, '')) || 0);
+    };
+    return rank(a) - rank(b);
   });
+}
+
+/** Published-only (localStorage). Used by instructor delete UI. */
+export function listPublishedLessonPresets() {
+  return sortLessonPresets(readAll().filter((p) => p && p.id && !p.builtin));
+}
+
+/** Student dropdown: built-in teaching cases + instructor-published. */
+export function listLessonPresets() {
+  const builtins = getBuiltinLessonPresets();
+  const published = listPublishedLessonPresets().filter(
+    (p) => !builtins.some((b) => b.id === p.id),
+  );
+  return sortLessonPresets([...builtins, ...published]);
 }
 
 export function getLessonPreset(id) {
@@ -40,7 +61,7 @@ export function getLessonPreset(id) {
 }
 
 export function isLessonPresetId(id) {
-  return typeof id === 'string' && /^L\d+$/.test(id);
+  return typeof id === 'string' && (/^L\d+$/.test(id) || /^case\d+$/.test(id));
 }
 
 /**
@@ -68,6 +89,7 @@ export function publishLessonPreset(spec, opts = {}) {
 }
 
 export function deleteLessonPreset(id) {
+  if (/^case\d+$/.test(String(id))) return; // built-in
   writeAll(readAll().filter((p) => p.id !== id));
 }
 
