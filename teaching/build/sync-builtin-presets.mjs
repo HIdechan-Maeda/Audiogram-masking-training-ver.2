@@ -2,6 +2,9 @@
  * Regenerate src/data/builtinLessonPresets.json from teaching/cases/caseNN.json.
  *
  *   node teaching/build/sync-builtin-presets.mjs
+ *
+ * Student-facing fields only: id, label, history, spec.
+ * Diagnosis names are intentionally omitted (would spoil worksheets).
  */
 
 import { writeFile } from 'node:fs/promises';
@@ -38,10 +41,11 @@ async function main() {
   const rows = [];
   for (const id of ids) {
     const c = await loadCase(id);
+    const history = Array.isArray(c.history) ? c.history.filter(Boolean) : [];
     rows.push({
       id: c.id,
       label: caseLabel(c.id),
-      diagnosis: c.diagnosis || '',
+      history,
       spec: lessonSpecFromCase(c),
     });
   }

@@ -3548,8 +3548,8 @@ ${episodeHint ? `
     if (!entry?.spec) return false;
     const { targets: lessonTargets, caseInfo } = materializeLessonCase(entry.spec, {
       caseId: entry.label || entry.id,
-      diagnosis: entry.diagnosis,
       builtin: entry.builtin,
+      history: entry.history,
     });
     setPoints([]);
     setTargets(lessonTargets);
@@ -5024,9 +5024,7 @@ ${targets.map((target, index) => {
               <option value="G">症例G</option>
               <option value="H">症例H</option>
               {lessonPresets.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.diagnosis ? `${p.label}（${p.diagnosis}）` : p.label}
-                </option>
+                <option key={p.id} value={p.id}>{p.label}</option>
               ))}
               {selectedPreset === 'Lesson' && <option value="Lesson">教材症例（リンク）</option>}
             </select>

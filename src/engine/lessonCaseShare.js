@@ -98,7 +98,7 @@ export function buildLessonCaseUrl(spec, origin = (typeof window !== 'undefined'
 /**
  * Deterministically materialize audiogram + companion tests from a lesson spec.
  * @param {LessonCaseSpec} spec
- * @param {{ caseId?: string, diagnosis?: string, builtin?: boolean }} [options]
+ * @param {{ caseId?: string, builtin?: boolean, history?: string[] }} [options]
  */
 export function materializeLessonCase(spec, options = {}) {
   const genOpts = {
@@ -125,9 +125,11 @@ export function materializeLessonCase(spec, options = {}) {
   const casePattern = PROFILE_CASE_PATTERN[profileName] || 'sensorineural';
   const ageLabel = meta.ageGroup || spec.ageGroup;
   const genderLabel = meta.sex === 'Male' ? '男性' : meta.sex === 'Female' ? '女性' : '';
-  const disorderLabel = options.diagnosis || PROFILE_LABELS[profileName] || profileName;
   const isBuiltin = Boolean(options.builtin);
+  const historyLines = Array.isArray(options.history) ? options.history.filter(Boolean) : [];
+  const historyText = historyLines.length > 0 ? historyLines.join('\n') : '';
 
+  // 学生向けには診断名・プロファイル名を出さない（課題のネタバレ防止）
   const caseInfo = {
     caseId: options.caseId || '教材',
     meta,
@@ -135,20 +137,19 @@ export function materializeLessonCase(spec, options = {}) {
     gender: genderLabel,
     age: ageLabel,
     ageGroup: ageLabel,
-    disorderType: profileName,
-    disorderLabel,
+    disorderType: isBuiltin ? '' : profileName,
+    disorderLabel: isBuiltin ? '' : (PROFILE_LABELS[profileName] || profileName),
     rightProfile: meta.rightProfile,
     leftProfile: meta.leftProfile,
     chiefComplaint: isBuiltin
-      ? `（臨床推論課題）${disorderLabel}`
+      ? (historyLines[0] || '課題シートの病歴を参照してください。')
       : '（教材症例）講師指定の症例です',
     history: isBuiltin
-      ? `臨床推論課題の同梱症例（${options.caseId || ''}）。課題シートと同じ生成条件です。`
-      : `seed=${meta.seed} / ${PROFILE_LABELS[profileName] || profileName} / 程度${meta.severity}`,
+      ? (historyText || '課題シートの病歴を参照してください。')
+      : `教材症例（seed 固定）。課題の指示に従って検査を進めてください。`,
     otoscopy: '教材用症例のため省略',
-    explanation: isBuiltin
-      ? 'teaching/cases と同条件の同梱症例です。オージオグラムと併用検査は同一 seed から導出されます。'
-      : '講師が登録した教材症例です。オージオグラムと併用検査は同一 seed から導出されています。',
+    // 診断・学習ポイントは学生画面に出さない
+    explanation: undefined,
     tympanogram: companion.tympanogram,
     artConfig: companion.artConfig,
     dpoaeConfig: companion.dpoaeConfig,
