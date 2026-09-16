@@ -190,9 +190,9 @@ export const CARHART_MIN_DEPTH_DB = 5;
  * Coles基準そのものの移植ではない。
  */
 export const NOISE_NOTCH_MIN_DEPTH_DB = 10;
-/** 突発性難聴: 程度≥1で病側−対側 mean AC(0.5/1/2 kHz) の最小差（教育用。軽度も30 dB床） */
+/** 突発性難聴: 程度≥1で病側−対側 mean AC(0.5/1/2 kHz) の最小差（教育用。軽度も30 dB下限） */
 export const SUDDEN_MIN_LATERALITY_DB = 30;
-/** ムンプス難聴: 程度≥1で病側 mean AC(0.5/1/2) の下限（高度〜聾寄りの教育用床） */
+/** ムンプス難聴: 程度≥1で病側 mean AC(0.5/1/2) の下限（高度〜聾寄りの教育用下限） */
 export const MUMPS_MIN_MEAN_AC_DB = 70;
 /** ムンプス難聴: 程度≥1の最小一側差 */
 export const MUMPS_MIN_LATERALITY_DB = 55;
@@ -309,7 +309,7 @@ function meanAcAt(rows, freqs) {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-/** 病側の指定周波数平均気導を下限まで底上げ（一側性感音の教育用床） */
+/** 病側の指定周波数平均気導を下限まで底上げ（一側性感音の教育用下限） */
 function enforceMinMeanAc(rows, minMean, freqs = ['0.5kHz', '1kHz', '2kHz']) {
   let out = rows;
   for (let guard = 0; guard < 8; guard++) {
@@ -440,11 +440,11 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
       const w = { "0.125kHz": 1.0, "0.25kHz": 1.0, "0.5kHz": 0.8, "1kHz": 0.4, "2kHz": 0.2, "4kHz": 0.1, "8kHz": 0.05 }[r.freq] || 0;
       add = w * depth;
     } else if (profile === 'SNHL_Sudden') {
-      // 軽度も一側差≥30 dB床を後段で保証するため、加算をやや大きめに
+      // 軽度も一側差≥30 dB下限を後段で保証するため、加算をやや大きめに
       const depth = [0, 35, 45, 65][Math.min(3, Math.max(0, Math.round(severity||0)))];
       add = depth * (0.7 + 0.3 * rand());
     } else if (profile === 'SNHL_Mumps') {
-      // 軽度は実質使わず高度寄りの床（後段で mean AC≥70・一側差≥55 も拘束）
+      // 軽度は実質使わず高度寄りの下限（後段で mean AC≥70・一側差≥55 も拘束）
       const depth = [0, 70, 85, 95][Math.min(3, Math.max(0, Math.round(severity||0)))];
       add = depth;
     } else if (profile === 'CHL_OME') {
@@ -453,7 +453,7 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
       const w = { "0.125kHz": 0.6, "0.25kHz": 0.9, "0.5kHz": 1.0, "1kHz": 0.9, "2kHz": 0.5, "4kHz": 0.3, "8kHz": 0.2 }[r.freq] || 0;
       add = w * depth;
     } else if (profile === 'CHL_AOM') {
-      // 伝音成分は低〜中音中心。OMEより大きいABGは医学的一般則としない（床はOMEと重複）
+      // 伝音成分は低〜中音中心。OMEより大きいABGは医学的一般則としない（下限はOMEと重複）
       const depth = [0, 12, 22, 30][Math.min(3, Math.max(0, Math.round(severity||0)))];
       const w = { "0.125kHz": 0.7, "0.25kHz": 1.0, "0.5kHz": 1.0, "1kHz": 0.8, "2kHz": 0.4, "4kHz": 0.2, "8kHz": 0.1 }[r.freq] || 0;
       add = w * depth;
@@ -591,7 +591,7 @@ export function generateAudiogram(opts = {}) {
     severity = 1;
   }
   // ムンプス: 学習者向けの無作為選択では軽度を選ばない（乱択時 severity=1→2）。
-  // 検証グリッドでは程度1も明示指定で生成するが、深度テーブル上は中等度相当とし高度床を満たす。
+  // 検証グリッドでは程度1も明示指定で生成するが、深度テーブル上は中等度相当とし高度下限を満たす。
   if (severityWasRandom && profile === 'SNHL_Mumps' && severity === 1) {
     severity = 2;
   }
@@ -718,13 +718,13 @@ export function generateAudiogram(opts = {}) {
     left = enforceBcRules(left, baseLeftProfile);
   }
 
-  // 突発・ムンプス: 一側差／病側平均の教育用床（SO後・BC拘束前に適用し、その後再拘束）
+  // 突発・ムンプス: 一側差／病側平均の教育用下限（SO後・BC拘束前に適用し、その後再拘束）
   if (isUnilateralProfile && affectedSide && severity >= 1) {
     const diseasedIsRight = affectedSide === 'R';
     let diseased = diseasedIsRight ? right : left;
     const contra = diseasedIsRight ? left : right;
     if (profile === 'SNHL_Sudden') {
-      // 先に一側差≥30。続けて程度別の絶対床で 0→1→2→3 の非減少を担保
+      // 先に一側差≥30。続けて程度別の絶対下限で 0→1→2→3 の非減少を担保
       diseased = enforceMinLaterality(diseased, contra, SUDDEN_MIN_LATERALITY_DB);
       const suddenAbsFloor = [0, 40, 55, 75][Math.min(3, Math.max(0, severity))];
       diseased = enforceMinMeanAc(diseased, suddenAbsFloor);
