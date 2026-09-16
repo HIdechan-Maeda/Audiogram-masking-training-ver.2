@@ -13,10 +13,10 @@
     "profile": "CHL_OME",
     "ageGroup": "30s",
     "sex": "female",
-    "severity": 1,
+    "severity": 2,
     "ears": "both",
     "seed": 4101,
-    "_comment": "この節が AudioScope EDU の生成器に渡る唯一の条件。学生シートの印刷内容と EDU の出力は必ずこの値から派生する。seed は授業回ごとに固定すること。"
+    "_comment": "severity≥2 で Tym B・ART 消失・DPOAE refer（教材シート所見と一致）。学生シートと EDU 出力は必ずこの値から派生する。seed は授業回ごとに固定すること。"
   },
   "masking": {
     "interauralAttenuationAC": 50,
@@ -34,32 +34,32 @@
   "representativeThresholds": {
     "_comment": "教員用の代表値。build/sync-thresholds.mjs で EDU の生成結果から更新できる。seed を変えたら必ず再同期すること。",
     "source": "generator",
-    "generatedAt": "2026-09-14T01:34:47.343Z",
+    "generatedAt": "2026-09-16T04:14:27.395Z",
     "generatorOpts": {
       "profile": "CHL_OME",
       "ageGroup": "30s",
       "sex": "Female",
-      "severity": 1,
+      "severity": 2,
       "seed": 4101
     },
     "ac": {
       "right": {
-        "125": 10,
+        "125": 15,
         "250": 25,
-        "500": 20,
+        "500": 25,
         "1000": 20,
         "2000": 25,
         "4000": 5,
-        "8000": -5
+        "8000": 0
       },
       "left": {
-        "125": 5,
+        "125": 10,
         "250": 20,
         "500": 20,
         "1000": 20,
         "2000": 25,
         "4000": 5,
-        "8000": -5
+        "8000": 0
       }
     },
     "bc": {
@@ -134,18 +134,18 @@
       ],
       "snr": {
         "right": [
-          1,
           0,
-          2,
-          1,
           0,
-          1
+          1,
+          1,
+          1,
+          0
         ],
         "left": [
           0,
-          2,
-          1,
           0,
+          1,
+          1,
           1,
           0
         ]
