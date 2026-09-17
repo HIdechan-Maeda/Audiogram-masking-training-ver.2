@@ -69,7 +69,7 @@ Department of Speech-Language-Hearing Therapy, School of Rehabilitation Sciences
 
 さらに純音聴力検査では、気導・骨導の閾値測定に加え、必要に応じたマスキングの判断と実施が不可欠である。マスキングは左右差や大きなABGがある症例で特に重要となるが、本稿ではマスキング操作の教育効果自体は扱わない。仮想の聴力像を規則に従って大量に生成できれば、測定手順の練習にとどまらず、マスキング判断を反復して学ぶ土台にもなりうる、という位置づけにとどめる。
 
-純音聴力検査教育用シミュレータは、初期のマイクロコンピュータ型トレーナーから、Web型シミュレータ、編集可能な患者定義を用いたソフトウェア、実際の検査音に応答する人工患者、VRおよびマネキン型シミュレータへと発展してきた1–10)。これらは、検査操作、患者応答、マスキング、臨床環境の再現、教育効果および臨床的有用性など、さまざまな観点から開発・評価されている。
+純音聴力検査教育用シミュレータは、初期のマイクロコンピュータ型トレーナーから、Web型シミュレータ、編集可能な患者定義を用いたソフトウェア、実際の検査音に応答する人工患者、VRおよびマネキン型シミュレータへと発展してきた1–10)。国内でも、あらかじめ用意した固定症例でオージオグラム測定を練習できるWeb型シミュレータが公開されている11)。これらは、検査操作、患者応答、マスキング、臨床環境の再現、教育効果および臨床的有用性など、さまざまな観点から開発・評価されている。固定症例は再現性に優れる一方、提示できる聴力像の種類・数が限られやすく、疾患名や難聴程度が事前に分かる運用にもなりやすい。
 
 AudioScope EDUは、著者が開発中の、純音聴力検査、ティンパノメトリー、アブミ骨筋反射、歪成分耳音響放射などを学習できるWeb教材である。本稿では、そのうち、年齢、性別、著者定義の教育用聴力像パターンおよび難聴程度に応じて、気導・骨導閾値を規則に基づいて生成する機能に焦点を当てた。この機能では、生成条件を学習者に示さず、条件の異なる聴力像を反復して提示できる。
 
@@ -181,9 +181,9 @@ AudioScope EDUは、著者が開発中の、純音聴力検査、ティンパノ
 
 ## Ⅳ．考察
 
-既存報告は主として検査操作や手続き訓練を扱っている1–4)。本検証の意義は、生成件数を増やしたことだけでなく、生成プログラムとは別に検証スクリプトを設け、正常出力と規則違反データの両方を評価した点にある。自ら設定した規則への高い適合率のみでは、検証器が常に合格を返す不具合を除外できない。このため、正常・適合データ12項目と規則違反データ16項目から成る異常系テストを行い、違反16件をすべて不適合と判定できることを示した。乱数初期値を含む同一入力での再出力一致、および同一条件で乱数初期値のみを変えたときの聴力像の多様化は、決定的な追跡可能性と、乱数が実質的に使われていない実装ではないことの補助的な確認である。年齢・教育用疾患パターン・難聴程度の規則と著者設定値を明示したことも、再現可能な教育用生成の基盤として重要である。高い適合率のみで生成規則の臨床的妥当性が示されるわけではない。学習者画面では疾患名や程度を知らせず測定でき、年齢・疾患・程度に応じた異なるオージオグラムが生成される（代表例は図3）。
+既存のシミュレータは、検査操作、患者応答、マスキング、臨床環境の再現や教育・臨床的有用性の評価を扱ってきた1–11)。固定症例型のWebシミュレータ11)は再現性に優れる一方、提示できる聴力像の種類・数や、条件秘匿の難しさという制約もある。本検証の意義は、生成件数を増やしたことだけでなく、生成プログラムとは別に検証スクリプトを設け、正常出力と規則違反データの両方を評価した点にある。自ら設定した規則への高い適合率のみでは、検証器が常に合格を返す不具合を除外できない。このため、正常・適合データ12項目と規則違反データ16項目から成る異常系テストを行い、違反16件をすべて不適合と判定できることを示した。乱数初期値を含む同一入力での再出力一致、および同一条件で乱数初期値のみを変えたときの聴力像の多様化は、決定的な追跡可能性と、乱数が実質的に使われていない実装ではないことの補助的な確認である。年齢・教育用疾患パターン・難聴程度の規則と著者設定値を明示したことも、再現可能な教育用生成の基盤として重要である。高い適合率のみで生成規則の臨床的妥当性が示されるわけではない。学習者画面では疾患名や程度を知らせず測定でき、年齢・疾患・程度に応じた異なるオージオグラムが生成される（代表例は図3）。
 
-教育上の利点は次のとおりである。第一に、紙の固定症例では数が限られやすいのに対し、規則生成では多様な聴力像を用意できる。第二に、学習者は疾患名を知らぬまま測定し、終了後に正答照合できるため、実臨床の検査手順に近い練習になる。第三に、左右差やABGのある生成例を繰り返せるため、マスキング判断の練習にも展開しうる。授業では教員が選択した生成例を提示し、自習では学習者が未知の生成例を反復測定するなど、目的に応じた運用が考えられる。ただし、これらの教育効果は本稿では評価していない。
+教育上の利点は次のとおりである。第一に、紙や固定症例型シミュレータでは数が限られやすいのに対し、規則生成では多様な聴力像を用意できる。第二に、学習者は疾患名を知らぬまま測定し、終了後に正答照合できるため、実臨床の検査手順に近い練習になる。第三に、左右差やABGのある生成例を繰り返せるため、マスキング判断の練習にも展開しうる。授業では教員が選択した生成例を提示し、自習では学習者が未知の生成例を反復測定するなど、目的に応じた運用が考えられる。ただし、これらの教育効果は本稿では評価していない。
 
 限界として、自ら定義した規則への適合確認にとどまり、外部の第三者検証ではない。具体的なdB値やスケールアウトの付与条件の多くは著者設定であり、生成したオージオグラムの臨床的妥当性の証明ではない。表1の疾患名は教育用パターンの識別のための便宜的な呼称である。ISO 7029は2017年版を用い、Amd 1:2024は未反映である（教育用基準帯としての利用であり、最新修正票に基づく疫学推定の再現を目的としない）。程度ラベルはWHO等級と同一ではない。専門家評価および教育効果の検証は別報で扱う。
 
@@ -205,25 +205,34 @@ AudioScope EDUは、著者が開発中の、純音聴力検査、ティンパノ
 
 ## 文献
 
+※投稿正本の文献番号は `manuscript_IgakuKensa_AudioScopeEDU_technical_validity_JAMT_v2.35.docx` に準拠（1–10＝先行シミュレータ、**11＝イトケン固定症例シミュレータ**、12–13＝オージオメータ／聴力検査規格、14＝ISO 7029、以降は疾患・特徴の参考）。本 Markdown は作業用で、番号体系が古い箇所が残る場合がある。
+
 1) Lieberth AK, Martin DR: The instructional effectiveness of a web-based audiometry simulator. J Am Acad Audiol, 2005; 16: 79–84.  
 2) Araújo DP, et al: Virtual audiometer: technology integrated to teaching. CoDAS, 2021; 33: e20200287.  
 3) Calandruccio L, Weidman D: Online simulation education for audiometry training. Am J Audiol, 2022; 31: 1–10.  
 4) Oyarzún-Díaz PA, et al: Validación y optimización de un prototipo de simulador de audiometría para estudiantes de fonoaudiología (SAEF) en tiempos de pandemia. Form Univ, 2023; 16: 45–54.  
-5) International Organization for Standardization: Acoustics—Statistical distribution of hearing thresholds related to age and gender. ISO 7029:2017, ISO, Geneva, 2017.  
-6) Gates GA, Mills JH: Presbycusis. Lancet, 2005; 366: 1111–1120.  
-7) McBride DI, Williams S: Audiometric notch as a sign of noise induced hearing loss. Occup Environ Med, 2001; 58: 46–51.  
-8) Coles RR, Lutman ME, Buffin JT: Guidelines on the diagnosis of noise-induced hearing loss for medicolegal purposes. Clin Otolaryngol Allied Sci, 2000; 25: 264–273.  
-9) Lopez-Escamez JA, et al: Diagnostic criteria for Menière’s disease. J Vestib Res, 2015; 25: 1–7.  
-10) Chandrasekhar SS, et al: Clinical practice guideline: sudden hearing loss (update). Otolaryngol Head Neck Surg, 2019; 161: S1–S45.  
-11) Hashimoto H, et al: An office-based prospective study of deafness in mumps. Pediatr Infect Dis J, 2009; 28: 173–175.  
-12) Rosenfeld RM, et al: Clinical practice guideline: otitis media with effusion (update). Otolaryngol Head Neck Surg, 2016; 154: S1–S41.  
-13) Kasemodel ALP, et al: Sensorineural hearing loss in the acute phase of a single episode of acute otitis media. Braz J Otorhinolaryngol, 2020; 86: 767–773.  
-14) Carhart R: Clinical application of bone conduction audiometry. Arch Otolaryngol, 1950; 51: 798–808.  
-15) Kashio A, et al: Carhart notch 2-kHz bone conduction threshold dip: a nondefinitive predictor of stapes fixation in conductive hearing loss with normal tympanic membrane. Arch Otolaryngol Head Neck Surg, 2011; 137: 236–240.  
-16) Wegner I, et al: Pure-tone audiometry in otosclerosis: insufficient evidence for the diagnostic value of the Carhart notch. Otolaryngol Head Neck Surg, 2013; 149: 528–532.  
-17) Merchant SN, McKenna MJ, Mehta RP, et al: Middle ear mechanics of Type III tympanoplasty (stapes columella): II. Clinical studies. Otol Neurotol, 2003; 24: 186–194.  
-18) Acoustical Society of America / American National Standards Institute: Specification for audiometers. ASA/ANSI S3.6-2025, ASA, New York, 2025.  
-19) International Organization for Standardization: Acoustics—Audiometric test methods—Part 1: Pure-tone air and bone conduction audiometry. ISO 8253-1:2010, ISO, Geneva, 2010.
+5) Gatehouse S: A micro-computer based trainer for pure-tone audiometry. Br J Audiol, 1986; 20: 141–145.  
+6) Kompis M, et al: A multilingual audiometer simulator software for training purposes. Acta Otolaryngol, 2012; 132: 428–433.  
+7) Kocian A, et al: An artificial patient for pure-tone audiometry. EURASIP J Audio Speech Music Process, 2018; 2018: 8.  
+8) Kwak C, et al: Efficacy of virtual reality pure-tone audiometry in training of hearing test for audiologist. Heliyon, 2024; 10: e40795.  
+9) Gerdes J, et al: The design and evaluation of a simulation tool for audiology screening education: Design science approach. JMIR Form Res, 2025; 9: e47150.  
+10) Rahme M, et al: Validation of the clinical assistant for research and learning (CARL) for pure-tone audiometric procedures. Int J Audiol, 2026; 65: 290–302.  
+11) イトケン株式会社: SimuAudio Tablette ver 0.8（オージオグラム・シミュレータ）. https://www.itokencorp.com/Audiogram/PHP/SimuAudioTab08.html (2026年9月17日参照).  
+12) Acoustical Society of America / American National Standards Institute: Specification for audiometers. ASA/ANSI S3.6-2025, ASA, New York, 2025.  
+13) International Organization for Standardization: Acoustics—Audiometric test methods—Part 1: Pure-tone air and bone conduction audiometry. ISO 8253-1:2010, ISO, Geneva, 2010.  
+14) International Organization for Standardization: Acoustics—Statistical distribution of hearing thresholds related to age and gender. ISO 7029:2017, ISO, Geneva, 2017.  
+15) Gates GA, Mills JH: Presbycusis. Lancet, 2005; 366: 1111–1120.  
+16) McBride DI, Williams S: Audiometric notch as a sign of noise induced hearing loss. Occup Environ Med, 2001; 58: 46–51.  
+17) Coles RR, Lutman ME, Buffin JT: Guidelines on the diagnosis of noise-induced hearing loss for medicolegal purposes. Clin Otolaryngol Allied Sci, 2000; 25: 264–273.  
+18) Lopez-Escamez JA, et al: Diagnostic criteria for Menière’s disease. J Vestib Res, 2015; 25: 1–7.  
+19) Chandrasekhar SS, et al: Clinical practice guideline: sudden hearing loss (update). Otolaryngol Head Neck Surg, 2019; 161: S1–S45.  
+20) Hashimoto H, et al: An office-based prospective study of deafness in mumps. Pediatr Infect Dis J, 2009; 28: 173–175.  
+21) Rosenfeld RM, et al: Clinical practice guideline: otitis media with effusion (update). Otolaryngol Head Neck Surg, 2016; 154: S1–S41.  
+22) Kasemodel ALP, et al: Sensorineural hearing loss in the acute phase of a single episode of acute otitis media. Braz J Otorhinolaryngol, 2020; 86: 767–773.  
+23) Carhart R: Clinical application of bone conduction audiometry. Arch Otolaryngol, 1950; 51: 798–808.  
+24) Kashio A, et al: Carhart notch 2-kHz bone conduction threshold dip: a nondefinitive predictor of stapes fixation in conductive hearing loss with normal tympanic membrane. Arch Otolaryngol Head Neck Surg, 2011; 137: 236–240.  
+25) Wegner I, et al: Pure-tone audiometry in otosclerosis: insufficient evidence for the diagnostic value of the Carhart notch. Otolaryngol Head Neck Surg, 2013; 149: 528–532.  
+26) Farahmand RB, et al: The audiometric and mechanical effects of partial ossicular discontinuity. Ear Hear, 2016; 37: 206–215.
 
 ## 図表説明
 
