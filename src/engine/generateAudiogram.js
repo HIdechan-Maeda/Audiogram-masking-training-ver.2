@@ -420,31 +420,59 @@ function enforceCarhartNotchGeometry(rows) {
   });
 }
 
-/** 加齢性: 気導を高音漸傾型にする（5 dB刻み）
+/** 加齢性ACに周波数ごとの軽い揺らぎ（±0/5、0多め） */
+function jitterAgeAc(rand, rows) {
+  return rows.map((r) => {
+    if (typeof r.ac !== 'number') return r;
+    const j = [-5, 0, 0, 0, 5][Math.floor(rand() * 5)];
+    const ac = roundTo5(clamp(r.ac + j, LIMITS_AC[r.freq].min, LIMITS_AC[r.freq].max));
+    let bc = r.bc;
+    if (isBCFreq(r.freq) && typeof bc === 'number') {
+      const lim = LIMITS_BC[r.freq];
+      bc = roundTo5(clamp(Math.min(bc, ac + 5), lim.min, lim.max));
+    }
+    return { ...r, ac, bc };
+  });
+}
+
+/** 加齢性: 高音漸傾を保ちつつ定規直線を避ける（5 dB刻み）
  *  - 低→高で非減少（高音が浅くなる逆傾きを禁止）
- *  - 1 kHz以降は各帯で前帯より最低 +5 dB（明確な漸傾）
+ *  - 最終1 kHzに対し 4 kHz ≥ +5、8 kHz ≥ +10（全体としての漸傾）
+ *  - 帯ごとの強制+5はしない（平坦区間や小さな段差を許容）
  */
 function enforceAgeSlopingAc(rows) {
   const order = ['0.125kHz', '0.25kHz', '0.5kHz', '1kHz', '2kHz', '4kHz', '8kHz'];
-  const minStepFrom = { '2kHz': 5, '4kHz': 5, '8kHz': 5 };
   const by = Object.fromEntries(rows.map((r) => [r.freq, { ...r }]));
-  let prev = null;
-  for (const f of order) {
-    const r = by[f];
-    if (!r || typeof r.ac !== 'number') continue;
-    let ac = r.ac;
-    if (prev != null) {
-      const need = prev + (minStepFrom[f] || 0);
-      if (ac < need) ac = need;
+
+  const walkNonDecreasing = () => {
+    let prev = null;
+    for (const f of order) {
+      const r = by[f];
+      if (!r || typeof r.ac !== 'number') continue;
+      let ac = r.ac;
+      if (prev != null && ac < prev) ac = prev;
+      ac = roundTo5(clamp(ac, LIMITS_AC[f].min, LIMITS_AC[f].max));
+      prev = ac;
+      let bc = r.bc;
+      if (isBCFreq(f) && typeof bc === 'number') {
+        const lim = LIMITS_BC[f];
+        bc = roundTo5(clamp(Math.min(bc, ac + 5), lim.min, lim.max));
+      }
+      by[f] = { ...r, ac, bc };
     }
-    ac = roundTo5(clamp(ac, LIMITS_AC[f].min, LIMITS_AC[f].max));
-    prev = ac;
-    let bc = r.bc;
-    if (isBCFreq(f) && typeof bc === 'number') {
-      const lim = LIMITS_BC[f];
-      bc = roundTo5(clamp(Math.min(bc, ac + 5), lim.min, lim.max));
+  };
+
+  walkNonDecreasing();
+  const ac1 = by['1kHz']?.ac;
+  if (typeof ac1 === 'number') {
+    if (by['4kHz'] && typeof by['4kHz'].ac === 'number' && by['4kHz'].ac < ac1 + 5) {
+      by['4kHz'] = { ...by['4kHz'], ac: ac1 + 5 };
     }
-    by[f] = { ...r, ac, bc };
+    if (by['8kHz'] && typeof by['8kHz'].ac === 'number' && by['8kHz'].ac < ac1 + 10) {
+      by['8kHz'] = { ...by['8kHz'], ac: ac1 + 10 };
+    }
+    // 高音床で上げたあと、再び非減少に整える
+    walkNonDecreasing();
   }
   return rows.map((r) => by[r.freq] || r);
 }
@@ -561,6 +589,7 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
     return outRow;
   });
   if (profile === 'SNHL_Age') {
+    out = jitterAgeAc(rand, out);
     out = enforceAgeSlopingAc(out);
   }
   // SNHL系ならBC NR規則
