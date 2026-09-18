@@ -23,12 +23,20 @@ export const LIMITS_AC = {
   '4kHz': { min: -5, max: 110 },
   '8kHz': { min: -5, max: 100 },
 };
+/** 感音骨導SO閾値THと同値（生成器 TH_SNHL_BC_NR / LIMITS_BC.max と同期） */
+export const TH_SNHL_BC_NR = {
+  '0.25kHz': 55,
+  '0.5kHz': 65,
+  '1kHz': 70,
+  '2kHz': 70,
+  '4kHz': 60,
+};
 export const LIMITS_BC = {
-  '0.25kHz': { min: 5, max: 60 },
-  '0.5kHz': { min: 5, max: 65 },
-  '1kHz': { min: 0, max: 70 },
-  '2kHz': { min: 0, max: 70 },
-  '4kHz': { min: -5, max: 65 },
+  '0.25kHz': { min: 5, max: TH_SNHL_BC_NR['0.25kHz'] },
+  '0.5kHz': { min: 5, max: TH_SNHL_BC_NR['0.5kHz'] },
+  '1kHz': { min: 0, max: TH_SNHL_BC_NR['1kHz'] },
+  '2kHz': { min: 0, max: TH_SNHL_BC_NR['2kHz'] },
+  '4kHz': { min: -5, max: TH_SNHL_BC_NR['4kHz'] },
 };
 
 export const BC_FREQS = new Set(['0.25kHz', '0.5kHz', '1kHz', '2kHz', '4kHz']);

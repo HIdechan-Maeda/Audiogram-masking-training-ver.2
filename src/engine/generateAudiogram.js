@@ -28,16 +28,18 @@ const LIMITS_AC = {
   "4kHz":     { min: -5, max: 110 },
   "8kHz":     { min: -5, max: 100 },
 };
+/** 感音の骨導SO閾値TH。LIMITS_BC.max と同一（教育用・著者設定）。 */
+const TH_SNHL_BC_NR = { "0.25kHz": 55, "0.5kHz": 65, "1kHz": 70, "2kHz": 70, "4kHz": 60 };
+/** 骨導の周波数別上下限。上限は TH_SNHL_BC_NR と揃える（G4／NRで同じ天井）。 */
 const LIMITS_BC = {
-  "0.25kHz":  { min: 5, max: 60 },
-  "0.5kHz":   { min: 5, max: 65 },
-  "1kHz":     { min: 0, max: 70 },
-  "2kHz":     { min: 0, max: 70 },
-  "4kHz":     { min: -5, max: 65 },
+  "0.25kHz":  { min: 5, max: TH_SNHL_BC_NR["0.25kHz"] },
+  "0.5kHz":   { min: 5, max: TH_SNHL_BC_NR["0.5kHz"] },
+  "1kHz":     { min: 0, max: TH_SNHL_BC_NR["1kHz"] },
+  "2kHz":     { min: 0, max: TH_SNHL_BC_NR["2kHz"] },
+  "4kHz":     { min: -5, max: TH_SNHL_BC_NR["4kHz"] },
 };
 const BC_FREQS = new Set(["0.25kHz","0.5kHz","1kHz","2kHz","4kHz"]);
 const isBCFreq = (f) => BC_FREQS.has(f);
-const TH_SNHL_BC_NR = { "0.25kHz": 55, "0.5kHz": 65, "1kHz": 70, "2kHz": 70, "4kHz": 60 };
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 const roundTo5 = (x) => Math.round(x / 5) * 5;
@@ -418,19 +420,55 @@ function enforceCarhartNotchGeometry(rows) {
   });
 }
 
+/** 加齢性: 気導を高音漸傾型にする（5 dB刻み）
+ *  - 低→高で非減少（高音が浅くなる逆傾きを禁止）
+ *  - 1 kHz以降は各帯で前帯より最低 +5 dB（明確な漸傾）
+ */
+function enforceAgeSlopingAc(rows) {
+  const order = ['0.125kHz', '0.25kHz', '0.5kHz', '1kHz', '2kHz', '4kHz', '8kHz'];
+  const minStepFrom = { '2kHz': 5, '4kHz': 5, '8kHz': 5 };
+  const by = Object.fromEntries(rows.map((r) => [r.freq, { ...r }]));
+  let prev = null;
+  for (const f of order) {
+    const r = by[f];
+    if (!r || typeof r.ac !== 'number') continue;
+    let ac = r.ac;
+    if (prev != null) {
+      const need = prev + (minStepFrom[f] || 0);
+      if (ac < need) ac = need;
+    }
+    ac = roundTo5(clamp(ac, LIMITS_AC[f].min, LIMITS_AC[f].max));
+    prev = ac;
+    let bc = r.bc;
+    if (isBCFreq(f) && typeof bc === 'number') {
+      const lim = LIMITS_BC[f];
+      bc = roundTo5(clamp(Math.min(bc, ac + 5), lim.min, lim.max));
+    }
+    by[f] = { ...r, ac, bc };
+  }
+  return rows.map((r) => by[r.freq] || r);
+}
+
 function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands, ageForBands, options = {}) {
   const { carhartApplied = false, aomMixedApplied = false } = options;
   // まずは現状：ACにseverity応じたバイアスを加える軽量版
-  const out = rows.map((r, idx, arr) => {
+  let out = rows.map((r, idx, arr) => {
     let add = 0;
     if (profile === 'SNHL_Age') {
-      const fk = FREQ_NUM[r.freq];
-      const baseAlpha = [0, 3, 6, 9][Math.min(3, Math.max(0, Math.round(severity||0)))];
-      const octHF = Math.max(0, Math.log2(fk / 1));
-      const octLF = fk < 1 ? Math.log2(1 / fk) : 0;
-      const kLF = 0.25 + 0.1 * Math.min(3, Math.max(0, Math.round(severity||0)));
-      add = baseAlpha * octHF + (baseAlpha * kLF) * octLF;
-      if (fk === 1) add *= 0.1;
+      // 高音の加齢変化は ISO 基準帯が主。程度は主に 125〜1000 Hz を底上げ。
+      // その後 enforceAgeSlopingAc で高音漸傾（低→高で非減少）を保証する。
+      const sev = Math.min(3, Math.max(0, Math.round(severity || 0)));
+      const depth = [0, 8, 26, 40][sev];
+      const w = {
+        '0.125kHz': 0.70,
+        '0.25kHz': 0.75,
+        '0.5kHz': 0.85,
+        '1kHz': 0.95,
+        '2kHz': 0.45,
+        '4kHz': 0.40,
+        '8kHz': 0.35,
+      }[r.freq] || 0;
+      add = depth * w;
     } else if (profile === 'SNHL_NoiseNotch') {
       const depth = [0, 14, 24, 32][Math.min(3, Math.max(0, Math.round(severity||0)))];
       const w = (r.freq === '4kHz') ? 1.1 : (r.freq === '2kHz' || r.freq === '8kHz') ? 0.3 : 0;
@@ -522,6 +560,9 @@ function applyProfileTransform(rand, rows, profile, severity, seed, sexForBands,
     }
     return outRow;
   });
+  if (profile === 'SNHL_Age') {
+    out = enforceAgeSlopingAc(out);
+  }
   // SNHL系ならBC NR規則
   if ((profile || '').startsWith('SNHL_')) {
     return applySnhlBcNr(out);
