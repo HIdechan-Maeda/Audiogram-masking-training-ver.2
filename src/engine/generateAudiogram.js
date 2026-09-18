@@ -162,18 +162,19 @@ function makeContralateralNormal(rand, sex, age) {
 
 /**
  * 両側性プロファイル用の左耳。
- * 右耳（疾患適用後）に耳単位の小さな左右差だけを足す。
- * ※旧実装は ISO 中央へ回帰させており、右だけ 10–30 dB 悪くなる系統バイアスがあった。
+ * 右耳パターンを基に、周波数ごとに独立した小さな左右差を付ける。
+ * （全帯域が同じだけずれる平行シフトはしない）
  */
 function correlateLeft(rand, rightRows, _sex, _age) {
-  // 耳全体で −10/−5/0/+5/+10（0 を厚め）。平均≈0。
-  const earBias = [-10, -5, 0, 0, 0, 5, 10][Math.floor(rand() * 7)];
   return rightRows.map((rr) => {
-    const ac = roundTo5(clamp(rr.ac + earBias, LIMITS_AC[rr.freq].min, LIMITS_AC[rr.freq].max));
+    // 0多め、±5ときどき、±10まれ。周波数ごとに独立。
+    const delta = [-10, -5, -5, 0, 0, 0, 0, 0, 0, 5, 5, 10][Math.floor(rand() * 12)];
+    const ac = roundTo5(clamp(rr.ac + delta, LIMITS_AC[rr.freq].min, LIMITS_AC[rr.freq].max));
     let bc = rr.bc;
     if (isBCFreq(rr.freq) && typeof bc === 'number') {
       const lim = LIMITS_BC[rr.freq];
-      bc = roundTo5(clamp(bc + earBias, lim.min, lim.max));
+      const bcExtra = [-5, 0, 0, 0, 5][Math.floor(rand() * 5)];
+      bc = roundTo5(clamp(bc + delta + bcExtra, lim.min, lim.max));
     }
     return { ...rr, ac, bc, soAC: false, soBC: false };
   });
@@ -437,10 +438,11 @@ function jitterAgeAc(rand, rows) {
 
 /** 加齢性: 高音漸傾を保ちつつ定規直線を避ける（5 dB刻み）
  *  - 低→高で非減少（高音が浅くなる逆傾きを禁止）
- *  - 最終1 kHzに対し 4 kHz ≥ +5、8 kHz ≥ +10（全体としての漸傾）
+ *  - withHfFloors時: 最終1 kHzに対し 4 kHz ≥ +5、8 kHz ≥ +10
  *  - 帯ごとの強制+5はしない（平坦区間や小さな段差を許容）
  */
-function enforceAgeSlopingAc(rows) {
+function enforceAgeSlopingAc(rows, options = {}) {
+  const { withHfFloors = true } = options;
   const order = ['0.125kHz', '0.25kHz', '0.5kHz', '1kHz', '2kHz', '4kHz', '8kHz'];
   const by = Object.fromEntries(rows.map((r) => [r.freq, { ...r }]));
 
@@ -463,16 +465,17 @@ function enforceAgeSlopingAc(rows) {
   };
 
   walkNonDecreasing();
-  const ac1 = by['1kHz']?.ac;
-  if (typeof ac1 === 'number') {
-    if (by['4kHz'] && typeof by['4kHz'].ac === 'number' && by['4kHz'].ac < ac1 + 5) {
-      by['4kHz'] = { ...by['4kHz'], ac: ac1 + 5 };
+  if (withHfFloors) {
+    const ac1 = by['1kHz']?.ac;
+    if (typeof ac1 === 'number') {
+      if (by['4kHz'] && typeof by['4kHz'].ac === 'number' && by['4kHz'].ac < ac1 + 5) {
+        by['4kHz'] = { ...by['4kHz'], ac: ac1 + 5 };
+      }
+      if (by['8kHz'] && typeof by['8kHz'].ac === 'number' && by['8kHz'].ac < ac1 + 10) {
+        by['8kHz'] = { ...by['8kHz'], ac: ac1 + 10 };
+      }
+      walkNonDecreasing();
     }
-    if (by['8kHz'] && typeof by['8kHz'].ac === 'number' && by['8kHz'].ac < ac1 + 10) {
-      by['8kHz'] = { ...by['8kHz'], ac: ac1 + 10 };
-    }
-    // 高音床で上げたあと、再び非減少に整える
-    walkNonDecreasing();
   }
   return rows.map((r) => by[r.freq] || r);
 }
@@ -734,7 +737,8 @@ export function generateAudiogram(opts = {}) {
     // 両側: 右パターン＋小さな左右差（疾患オフセットをISO中央へ戻さない）
     left = correlateLeft(rand, right, sex, ageGroup);
     if (profile === 'SNHL_Age') {
-      left = enforceAgeSlopingAc(left);
+      // 左右差の周波数パターンを潰さないよう、左は非減少のみ（1 kHz相対床は右のみ）
+      left = enforceAgeSlopingAc(left, { withHfFloors: false });
     }
   }
 
