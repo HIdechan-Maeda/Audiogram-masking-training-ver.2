@@ -160,20 +160,20 @@ function makeContralateralNormal(rand, sex, age) {
   return base.map(r => ({ ...r }));
 }
 
-// 左右相関をつけて左耳を生成（ρ≈0.7）
-function correlateLeft(rand, rightRows, sex, age) {
-  const rho = 0.55;
-  return rightRows.map((rr, i) => {
-    const b = getBand(sex, age, rr.freq);
-    const sd = (b.plus2SD - b.median) / 2;
-    const eps = randNormal(rand, 0, sd * 0.3);
-    const target = b.median + rho * (rr.ac - b.median) + eps;
-    const ac = roundTo5(clamp(target, LIMITS_AC[rr.freq].min, LIMITS_AC[rr.freq].max));
+/**
+ * 両側性プロファイル用の左耳。
+ * 右耳（疾患適用後）に耳単位の小さな左右差だけを足す。
+ * ※旧実装は ISO 中央へ回帰させており、右だけ 10–30 dB 悪くなる系統バイアスがあった。
+ */
+function correlateLeft(rand, rightRows, _sex, _age) {
+  // 耳全体で −10/−5/0/+5/+10（0 を厚め）。平均≈0。
+  const earBias = [-10, -5, 0, 0, 0, 5, 10][Math.floor(rand() * 7)];
+  return rightRows.map((rr) => {
+    const ac = roundTo5(clamp(rr.ac + earBias, LIMITS_AC[rr.freq].min, LIMITS_AC[rr.freq].max));
     let bc = rr.bc;
     if (isBCFreq(rr.freq) && typeof bc === 'number') {
       const lim = LIMITS_BC[rr.freq];
-      const bcRaw = b.median + rho * (bc - b.median) + (rand() - 0.5) * 12.0;
-      bc = roundTo5(clamp(bcRaw, lim.min, lim.max));
+      bc = roundTo5(clamp(bc + earBias, lim.min, lim.max));
     }
     return { ...rr, ac, bc, soAC: false, soBC: false };
   });
@@ -702,8 +702,11 @@ export function generateAudiogram(opts = {}) {
       }
     }
   } else {
-    // 両側同時生成（相関あり）
+    // 両側: 右パターン＋小さな左右差（疾患オフセットをISO中央へ戻さない）
     left = correlateLeft(rand, right, sex, ageGroup);
+    if (profile === 'SNHL_Age') {
+      left = enforceAgeSlopingAc(left);
+    }
   }
 
   right = applyBcRandomJitter(rand, right);
