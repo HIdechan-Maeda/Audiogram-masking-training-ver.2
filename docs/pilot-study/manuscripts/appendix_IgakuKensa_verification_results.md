@@ -1,6 +1,6 @@
 # 電子付録1（Markdown控え）
 
-投稿用の体裁は `Supplement1_verification_v2.43.docx` を正とする。
+投稿用の体裁は `Supplement1_verification_v2.44.docx` を正とする。
 
 # 聴力像自動生成・仕様適合検証結果
 
