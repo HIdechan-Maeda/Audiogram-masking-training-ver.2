@@ -1,3 +1,4 @@
+import { DPOAE_F2_KHZ } from './engine/dpoaeConstants';
 import React, { useEffect, useRef, useState } from 'react';
 
 // DPOAE DP-gramグラフコンポーネント（GIF生成対応）
@@ -30,7 +31,7 @@ export default function DPOAE({
   const audioNodesRef = useRef([]);
 
   // 測定周波数（f2、kHz）
-  const frequencies = [1, 2, 3, 4, 6, 8];
+  const frequencies = [...DPOAE_F2_KHZ];
   
   // 音声生成・再生用
   const initializeAudioContext = async () => {

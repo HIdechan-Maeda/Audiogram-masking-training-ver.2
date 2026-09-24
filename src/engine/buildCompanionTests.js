@@ -1,3 +1,4 @@
+import { DPOAE_F2_KHZ } from './dpoaeConstants.js';
 /**
  * Companion clinical tests derived from an audiogram case (Tym / ART / DPOAE).
  * Shared by student MVP and instructor case generator.
@@ -479,7 +480,7 @@ export function buildArtConfig(presetTargets, tympanogram, disorderName = null, 
 
 export function buildDPOAEConfig(presetTargets, tympanogram, meta = {}) {
   // DPOAEの周波数: [1, 2, 3, 4, 6, 8] kHz
-  const dpoaeFrequencies = [1, 2, 3, 4, 6, 8];
+  const dpoaeFrequencies = [...DPOAE_F2_KHZ];
   
   // オージオグラムのAC値を抽出（Hz単位で保存）
   const audiogramAC = { right: {}, left: {} };
@@ -584,7 +585,7 @@ export function buildDPOAEConfig(presetTargets, tympanogram, meta = {}) {
 }
 
 export function generateDPOAEData(dpoaeConfig, caseId = '') {
-  const frequencies = [1, 2, 3, 4, 6, 8];
+  const frequencies = [...DPOAE_F2_KHZ];
   
   // ノイズフロアの基本値（周波数ごとの範囲の中間値）
   const noiseFloorBase = {
@@ -744,7 +745,7 @@ function inferEarType(tym, earKey) {
 
 function summarizeDpoaePresent(cfg, data, ear) {
   if (!data?.[ear]) return '—';
-  const freqs = cfg?.frequencies || [1, 2, 3, 4, 6, 8];
+  const freqs = cfg?.frequencies || [...DPOAE_F2_KHZ];
   const noise = data.noiseFloor?.[ear] || freqs.map(() => 0);
   let present = 0;
   data[ear].forEach((lvl, i) => {

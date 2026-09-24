@@ -17,6 +17,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { assertDpoaeFrequencyLabels } from '../../src/engine/dpoaeConstants.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -68,6 +69,17 @@ export function validateCase(c) {
   if (!m) throw new Error(`${c.id}: masking 節がない`);
   for (const k of ['interauralAttenuationAC', 'interauralAttenuationBC', 'safetyMargin']) {
     if (typeof m[k] !== 'number') throw new Error(`${c.id}: masking.${k} が数値でない`);
+  }
+
+  const dpoae = c.findings?.dpoae;
+  if (dpoae) {
+    assertDpoaeFrequencyLabels(dpoae.frequencies, `${c.id}.findings.dpoae`);
+    for (const ear of ['right', 'left']) {
+      const snr = dpoae.snr?.[ear];
+      if (!Array.isArray(snr) || snr.length !== dpoae.frequencies.length) {
+        throw new Error(`${c.id}: findings.dpoae.snr.${ear} の長さが周波数と一致しない`);
+      }
+    }
   }
   return true;
 }

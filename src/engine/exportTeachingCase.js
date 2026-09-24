@@ -1,3 +1,4 @@
+import { DPOAE_F2_KHZ } from './dpoaeConstants.js';
 /**
  * EDU 講師画面で作った症例 → 臨床推論課題（teaching/cases）向けの書き出し。
  * ブラウザ／Node 両方可（Node 専用 API は使わない）。
@@ -112,7 +113,7 @@ export function companionToFindings(companion) {
     },
   };
 
-  const freqs = dpoaeCfg?.frequencies || [1, 2, 3, 4, 6, 8];
+  const freqs = dpoaeCfg?.frequencies || [...DPOAE_F2_KHZ];
   const snrOf = (ear) => {
     if (!dpoae?.[ear] || !dpoae.noiseFloor?.[ear]) {
       return freqs.map(() => null);

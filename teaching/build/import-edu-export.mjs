@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { validateCase } from '../cases/index.mjs';
+import { assertDpoaeFrequencyLabels } from '../../src/engine/dpoaeConstants.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CASES_DIR = resolve(HERE, '..', 'cases');
@@ -91,9 +92,19 @@ async function main() {
     },
     representativeThresholds: exported.representativeThresholds || base.representativeThresholds,
     history: exported.history?.length ? exported.history : base.history,
+    // findings は EDU 書き出しを優先。浅い merge だと旧 DPOAE 周波数（例: 1.5k）が残る。
     findings: {
       ...(base.findings || {}),
       ...(exported.findings || {}),
+      ...(exported.findings?.dpoae
+        ? { dpoae: exported.findings.dpoae }
+        : {}),
+      ...(exported.findings?.tympanometry
+        ? { tympanometry: exported.findings.tympanometry }
+        : {}),
+      ...(exported.findings?.acousticReflex
+        ? { acousticReflex: exported.findings.acousticReflex }
+        : {}),
     },
     // stages / teaching / rubric 等はテンプレートを維持（教員が後で編集）
     _importedFromEdu: {
@@ -108,6 +119,12 @@ async function main() {
   if (merged.generation) {
     merged.generation._comment =
       'EDU 講師画面から取り込んだ生成条件。学生シートと EDU 出力は必ずこの値から派生する。';
+  }
+
+  if (merged.findings?.dpoae) {
+    assertDpoaeFrequencyLabels(merged.findings.dpoae.frequencies, `${id} import DPOAE`);
+  } else {
+    console.warn(`警告: ${id} の書き出しに findings.dpoae がありません。テンプレートの旧周波数が残る可能性があります。`);
   }
 
   validateCase(merged);

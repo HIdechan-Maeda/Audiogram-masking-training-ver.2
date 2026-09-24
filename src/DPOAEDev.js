@@ -1,9 +1,10 @@
+import { DPOAE_F2_KHZ } from './engine/dpoaeConstants';
 import React, { useState } from 'react';
 import DPOAE from './DPOAE';
 
 // 開発用：各症例のDPOAEを確認する画面
 function buildDPOAEConfig(presetTargets, tympanogram) {
-  const dpoaeFrequencies = [1, 2, 3, 4, 6, 8];
+  const dpoaeFrequencies = [...DPOAE_F2_KHZ];
   const audiogramAC = { right: {}, left: {} };
   presetTargets.forEach(target => {
     if (target.transducer === 'AC') {
@@ -45,7 +46,7 @@ function buildDPOAEConfig(presetTargets, tympanogram) {
 }
 
 function generateDPOAEData(dpoaeConfig, caseId = '') {
-  const frequencies = [1, 2, 3, 4, 6, 8];
+  const frequencies = [...DPOAE_F2_KHZ];
   const noiseFloorBase = {
     1: 17, 2: 15, 3: 13, 4: 11.5, 6: 10, 8: 10
   };

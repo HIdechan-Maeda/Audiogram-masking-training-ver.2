@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
  * EDU の生成器を実際に呼び、その出力で cases/caseNN.json の
- * representativeThresholds を更新する。
+ * representativeThresholds と findings（Tym／ART／DPOAE）を更新する。
  *
  *   node teaching/build/sync-thresholds.mjs case01
  *   node teaching/build/sync-thresholds.mjs            全症例
  *   node teaching/build/sync-thresholds.mjs case01 --dry-run
+ *   node teaching/build/sync-thresholds.mjs case01 --thresholds-only
  *
- * これを走らせる意味：教員用の解答（マスキング計算の正答、気導の交差聴取判定など）は
- * すべて representativeThresholds から計算されている。seed を変えたのに同期していないと、
- * 学生が画面で測る値と教員用の正答がずれる。seed を触ったら必ず実行すること。
+ * seed を変えたら必ず実行すること。DPOAE 周波数も EDU 本体と同じ
+ * buildCompanionBundle から取る。
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -17,18 +17,21 @@ import { readFile as readFileAsync, writeFile as writeFileAsync } from 'node:fs/
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { loadCase, listCaseIds, toGeneratorOptions } from '../cases/index.mjs';
+import { companionToFindings } from '../../src/engine/exportTeachingCase.js';
+import { DPOAE_FREQ_LABELS } from '../../src/engine/dpoaeConstants.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..', '..');
 const CASES_DIR = resolve(HERE, '..', 'cases');
 const ENGINE_SRC = join(ROOT, 'src', 'engine', 'generateAudiogram.js');
+const COMPANION_SRC = join(ROOT, 'src', 'engine', 'buildCompanionTests.js');
 const CACHE_DIR = join(ROOT, 'scripts', '.cache');
 const CACHE_ENGINE = join(CACHE_DIR, 'generateAudiogram.mjs');
+const CACHE_COMPANION = join(CACHE_DIR, 'buildCompanionTests.mjs');
 
 const AC_FREQS = [125, 250, 500, 1000, 2000, 4000, 8000];
 const BC_FREQS = [250, 500, 1000, 2000, 4000];
 
-/** エンジンの freq ラベル ↔ Hz */
 const FREQ_LABEL_TO_HZ = {
   '0.125kHz': 125,
   '0.25kHz': 250,
@@ -39,10 +42,6 @@ const FREQ_LABEL_TO_HZ = {
   '8kHz': 8000,
 };
 
-/**
- * CRA/webpack 向けの JSON import を Node 用に書き換えたキャッシュを用意する
- *（scripts/verify-audiogram-generation.mjs と同じ手法）。
- */
 function ensureEngineCache() {
   mkdirSync(CACHE_DIR, { recursive: true });
   const src = readFileSync(ENGINE_SRC, 'utf8');
@@ -59,9 +58,16 @@ const ISO_DATA = JSON.parse(readFileSync(join(__dirname, "../../src/data/iso7029
   writeFileSync(CACHE_ENGINE, src.replace(oldImp, newImp));
 }
 
-/**
- * generateAudiogram を呼び、representativeThresholds 用の形に正規化する。
- */
+function ensureCompanionCache() {
+  mkdirSync(CACHE_DIR, { recursive: true });
+  let src = readFileSync(COMPANION_SRC, 'utf8');
+  src = src.replace(
+    /from ['"]\.\/dpoaeConstants(?:\.js)?['"]/,
+    "from '../../src/engine/dpoaeConstants.js'"
+  );
+  writeFileSync(CACHE_COMPANION, src);
+}
+
 async function callGenerator(caseDef) {
   ensureEngineCache();
   const mod = await import(pathToFileURL(CACHE_ENGINE).href + '?t=' + Date.now());
@@ -71,18 +77,21 @@ async function callGenerator(caseDef) {
       `generateAudiogram が見つかりません。export: ${Object.keys(mod).join(', ')}`
     );
   }
-
   const opts = toGeneratorOptions(caseDef);
   const result = generate(opts);
-  return normalize(result);
+  return { opts, result, thresholds: normalize(result) };
 }
 
-/**
- * エンジン出力 { right/left: [{freq, ac, bc, soAC, soBC}, ...] }
- * → { ac: { right: {"500": dB}, ... }, bc: { ... } }
- *
- * SO 行も数値閾値（エンジンの dB）を残す。教員用マスキング計算は数値を前提とする。
- */
+async function callCompanion(caseData) {
+  ensureCompanionCache();
+  const mod = await import(pathToFileURL(CACHE_COMPANION).href + '?t=' + Date.now());
+  const build = mod.buildCompanionBundle;
+  if (typeof build !== 'function') {
+    throw new Error(`buildCompanionBundle が見つかりません。export: ${Object.keys(mod).join(', ')}`);
+  }
+  return build(caseData);
+}
+
 function normalize(result) {
   if (!result?.right || !result?.left) {
     throw new Error(
@@ -139,21 +148,29 @@ function summarize(t) {
     .join('\n    ');
 }
 
-async function syncOne(id, dryRun) {
-  const c = await loadCase(id);
-  const opts = toGeneratorOptions(c);
+async function syncOne(id, { dryRun, thresholdsOnly }) {
+  // loadCase は旧 DPOAE 周波数でも通したいので、同期前は raw 読み
+  const path = join(CASES_DIR, `${id}.json`);
+  const raw = JSON.parse(await readFileAsync(path, 'utf8'));
+  const opts = toGeneratorOptions(raw);
   console.log(`${id} (profile: ${opts.profile}, sex: ${opts.sex}, seed: ${opts.seed})`);
 
-  const thresholds = await callGenerator(c);
+  const { result, thresholds } = await callGenerator(raw);
   console.log(`    ${summarize(thresholds)}`);
+
+  let findings = null;
+  if (!thresholdsOnly) {
+    const companion = await callCompanion(result);
+    findings = companionToFindings(companion);
+    console.log(`    DPOAE freqs: ${findings.dpoae.frequencies.join(',')} (EDU=${DPOAE_FREQ_LABELS.join(',')})`);
+    console.log(`    DPOAE SNR R: ${findings.dpoae.snr.right.join(',')} / L: ${findings.dpoae.snr.left.join(',')}`);
+  }
 
   if (dryRun) {
     console.log('    --dry-run のため書き込みませんでした。');
     return;
   }
 
-  const path = join(CASES_DIR, `${id}.json`);
-  const raw = JSON.parse(await readFileAsync(path, 'utf8'));
   raw.representativeThresholds = {
     _comment: raw.representativeThresholds?._comment,
     source: 'generator',
@@ -161,19 +178,26 @@ async function syncOne(id, dryRun) {
     generatorOpts: opts,
     ...thresholds,
   };
-  await writeFileAsync(path, JSON.stringify(raw, null, 2) + '\n', 'utf8');
+  if (findings) {
+    raw.findings = {
+      ...(raw.findings || {}),
+      ...findings,
+    };
+  }
+  await writeFileAsync(path, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
   console.log(`    ${id}.json を更新しました。build を再実行してください。`);
 }
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
+const thresholdsOnly = args.includes('--thresholds-only');
 const ids = args.filter((a) => !a.startsWith('--'));
 const targets = ids.length ? ids : await listCaseIds();
 
 let failed = 0;
 for (const id of targets) {
   try {
-    await syncOne(id, dryRun);
+    await syncOne(id, { dryRun, thresholdsOnly });
   } catch (e) {
     console.error(`  ${id}: ${e.message}\n`);
     failed++;
