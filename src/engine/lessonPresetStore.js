@@ -2,7 +2,7 @@
  * Instructor-published lesson presets shown in the student preset dropdown.
  * Storage: localStorage (same origin / same browser). Cross-device → Supabase later.
  *
- * Built-in 症例1 / 症例2 (teaching/cases) are always merged into the student list.
+ * Built-in 症例1〜N (teaching/cases) are always merged into the student list.
  */
 
 import { getBuiltinLessonPresets } from './builtinLessonPresets';
@@ -30,6 +30,17 @@ function writeAll(list) {
   }
 }
 
+/** Rename legacy 「教材N」 labels so the student dropdown matches worksheet naming. */
+function normalizePublishedLabel(entry) {
+  if (!entry || typeof entry !== 'object') return entry;
+  const label = String(entry.label || '');
+  const m = label.match(/^教材(\d+)$/);
+  if (m) {
+    return { ...entry, label: `追加症例${m[1]}` };
+  }
+  return entry;
+}
+
 function sortLessonPresets(list) {
   return list.slice().sort((a, b) => {
     const rank = (p) => {
@@ -44,7 +55,11 @@ function sortLessonPresets(list) {
 
 /** Published-only (localStorage). Used by instructor delete UI. */
 export function listPublishedLessonPresets() {
-  return sortLessonPresets(readAll().filter((p) => p && p.id && !p.builtin));
+  return sortLessonPresets(
+    readAll()
+      .filter((p) => p && p.id && !p.builtin)
+      .map(normalizePublishedLabel),
+  );
 }
 
 /** Student dropdown: built-in teaching cases + instructor-published. */
@@ -65,7 +80,8 @@ export function isLessonPresetId(id) {
 }
 
 /**
- * Register a lesson case as 教材N in the student preset list.
+ * Register an ad-hoc lesson case in the student preset list.
+ * Built-in 症例1〜N come from teaching/cases (sync-builtin-presets); do not use this for those.
  * @param {object} spec - LessonCaseSpec (seed + profile + includes)
  * @param {{ label?: string }} [opts]
  */
@@ -76,7 +92,7 @@ export function publishLessonPreset(spec, opts = {}) {
     return Math.max(max, n);
   }, 0) + 1;
   const id = `L${nextNum}`;
-  const label = opts.label || `教材${nextNum}`;
+  const label = opts.label || `追加症例${nextNum}`;
   const entry = {
     id,
     label,

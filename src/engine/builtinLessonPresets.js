@@ -1,5 +1,5 @@
 /**
- * Built-in teaching cases (症例1 / 症例2) always shown in the student preset list.
+ * Built-in teaching cases (症例1〜N) always shown in the student preset list.
  * Specs must match teaching/cases/caseNN.json → generation (see sync-builtin-presets.mjs).
  * Do not expose diagnosis names to students.
  */

@@ -668,7 +668,7 @@ export default function InstructorCaseGenerator() {
 
       {publishedList.length > 0 && (
         <div className="border border-indigo-100 rounded-xl p-3 bg-indigo-50 mb-6">
-          <div className="text-sm font-medium text-indigo-900 mb-2">追加登録（講師OK分。症例1・2は同梱）</div>
+          <div className="text-sm font-medium text-indigo-900 mb-2">追加登録（講師OK分。症例1〜4は同梱）</div>
           <ul className="space-y-1">
             {publishedList.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-2 text-xs text-indigo-950">

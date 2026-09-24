@@ -36,5 +36,43 @@
       "includeArt": true,
       "includeDpoae": true
     }
+  },
+  {
+    "id": "case03",
+    "label": "症例3",
+    "history": [
+      "62歳・男性。起床時から右耳の聞こえが急に悪くなり，強い耳鳴がある。回転性のめまいはないが，ふらつきを少し感じる。",
+      "感冒・外傷・騒音暴露の直前歴はない。右難聴は昨日から今日にかけて改善していない。左耳は以前と変わらない。耳痛・耳漏はない。"
+    ],
+    "spec": {
+      "ageGroup": "60s",
+      "sex": "Male",
+      "profile": "SNHL_Sudden",
+      "severity": 3,
+      "affectedSide": "R",
+      "seed": 978815325,
+      "includeTym": true,
+      "includeArt": true,
+      "includeDpoae": true
+    }
+  },
+  {
+    "id": "case04",
+    "label": "症例4",
+    "history": [
+      "61歳・男性。工場勤務が長く，耳栓はあまり使っていなかった。ここ数年，人の話が聞き取りにくく，テレビの音量も上がった。",
+      "耳痛・耳漏・回転性めまいはない。難聴は徐々に進行した印象で，左右どちらが特に悪いという自覚ははっきりしない。耳鳴は高音性で両側にある。"
+    ],
+    "spec": {
+      "ageGroup": "60s",
+      "sex": "Male",
+      "profile": "SNHL_NoiseNotch",
+      "severity": 3,
+      "affectedSide": null,
+      "seed": 559035839,
+      "includeTym": true,
+      "includeArt": true,
+      "includeDpoae": true
+    }
   }
 ]
