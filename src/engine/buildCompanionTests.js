@@ -218,8 +218,8 @@ export function buildArtConfig(presetTargets, tympanogram, disorderName = null, 
   // ティンパノグラム型とpeakPressureを取得（明示タイプ優先）
   const getTympanogramType = (ear, tymp) => resolveTympanogramEarType(tymp, ear);
   
-  // 耳硬化症の場合はART消失（As型でも反射消失）
-  const isOtosclerosis = disorderName === '耳硬化症';
+  // 耳硬化症の場合はART消失（As型でも反射消失）。EDU のプロファイル名でも判定する。
+  const isOtosclerosis = disorderName === '耳硬化症' || disorderName === 'CHL_Otosclerosis';
   
   const rightType = getTympanogramType('right', tympanogram);
   const leftType = getTympanogramType('left', tympanogram);
@@ -463,6 +463,16 @@ export function buildArtConfig(presetTargets, tympanogram, disorderName = null, 
     const cfg = artConfig[earKey];
     return !!(cfg.ipsilateralOverride || cfg.contralateralOverride);
   };
+
+  // 耳硬化症：プローブを当てた耳の同側・対側とも消失（アブミ骨固着）。ティンパノ型 As は維持する。
+  const earIsOtosclerosis = (side) => {
+    const profile = profiles[side];
+    if (profile === 'CHL_Otosclerosis') return true;
+    if (profile && profile !== 'CHL_Otosclerosis') return false;
+    return isOtosclerosis;
+  };
+  if (earIsOtosclerosis('right')) markAbsentEar('right');
+  if (earIsOtosclerosis('left')) markAbsentEar('left');
 
   const rightIsConductive = artConfig.right.tympanogramType === 'B';
   const leftIsConductive = artConfig.left.tympanogramType === 'B';
