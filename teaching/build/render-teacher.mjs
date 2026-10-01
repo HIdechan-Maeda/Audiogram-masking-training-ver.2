@@ -2,7 +2,7 @@ import { p, h1, h2, h3, box, table, run } from './docx-kit.mjs';
 import { buildDoc } from './render-student.mjs';
 import {
   formula, maskingAnswerTable, boneConductionPlateau,
-  plateauWidthFromAbg, dilemmaThresholdAbg,
+  plateauWidthFromAbg,
 } from './masking.mjs';
 
 const FILL = { info: 'E8F0FA', warn: 'FFF4E0' };
@@ -21,23 +21,18 @@ function renderMaskingAnswer(c) {
   out.push(p([run('Q4-3　骨導のマスキング計算：', { bold: true }), run('生成値により多少変動するが、代表的な値は次のとおり。')]));
   out.push(table(widths, [
     ['項目', ...cols],
-    [`非検耳（${EAR_JA[m.nonTestEar]}）の気導閾値`, ...rows.map((r) => String(r.acNonTestEar))],
     [`検耳（${EAR_JA[m.testEar]}）の骨導閾値`, ...rows.map((r) => String(r.bcTestEar))],
-    ['①　最小有効マスキング量', ...rows.map((r) => String(r.min))],
+    ['①　マスキング負荷量（非検耳へ）', ...rows.map((r) => String(r.min))],
     ['②　最大マスキング量', ...rows.map((r) => String(r.max))],
     ['③　プラトー幅', ...rows.map((r) => String(r.width))],
     ['④　プラトーは取れるか', ...rows.map((r) => (r.plateauObtainable ? '○' : '×'))],
   ], { center: true }));
 
   const r0 = rows[0];
-  out.push(p(`計算は ①＝${r0.acNonTestEar}＋${m.safetyMargin}＝${r0.min}、②＝${r0.bcTestEar}＋${m.interauralAttenuationAC}−${m.safetyMargin}＝${r0.max}、③＝${r0.max}−${r0.min}＝${r0.width} となる。実測の気導・骨導が上記と異なる場合は、学生の実測値から計算した値が正しければ正答とすること。`));
-
-  const k = dilemmaThresholdAbg(m);
+  out.push(p(`①＝検耳骨導 ${r0.bcTestEar}＋安全域 ${m.safetyMargin}＝${r0.min} dB を非検耳（${EAR_JA[m.nonTestEar]}）に負荷する。②＝${r0.bcTestEar}＋${m.interauralAttenuationAC}−${m.safetyMargin}＝${r0.max}、③＝${r0.width}（IA − 2×安全域）。実測の骨導が異なれば、学生の実測から同じ式で計算した値を正答とする。`));
   out.push(box([
-    '教員向けの一般化：両耳対称であれば、プラトー幅は次のように書き直せる。',
-    '　プラトー幅 ＝ IA −（非検耳AC − 検耳BC）− 2×安全域 ＝ IA − ABG − 2×安全域',
-    `　本課題の設定（IA ${m.interauralAttenuationAC}、安全域 ${m.safetyMargin}）では　プラトー幅 ＝ ${k} − ABG`,
-    `したがって ABG が ${k} dB に達するとプラトー幅はゼロになり、それ以上ではマスキングジレンマに陥る。症例1（ABG 15〜20）では 10〜15 dB のプラトーが取れるが、レベル2の耳硬化症・耳小骨連鎖離断（ABG 30〜50）では取れなくなる。この式は学生には示さず、Q6-4 で自力で気づかせること。`,
+    '負荷量は検耳の骨導＋安全域であり、非検耳の気導では決めない。',
+    `本課題の設定（IA ${m.interauralAttenuationAC}、安全域 ${m.safetyMargin}）ではプラトー幅は ${m.interauralAttenuationAC - 2 * m.safetyMargin} dB で、ABG によっては変わらない。`,
   ], FILL.info));
   return out;
 }
@@ -48,9 +43,8 @@ function computedAnswer(key, c) {
   if (key === 'plateauAtAbg40') {
     const abg = 40;
     const bcTestEar = c.representativeThresholds.bc[m.testEar]['500'];
-    const acNonTestEar = bcTestEar + abg;
-    const r = boneConductionPlateau({ acNonTestEar, bcTestEar, masking: m });
-    return `ABG ${abg} dB なら非検耳の気導閾値は ${bcTestEar}＋${abg}＝${acNonTestEar} dB。①＝${acNonTestEar}＋${m.safetyMargin}＝${r.min}、②＝${bcTestEar}＋${m.interauralAttenuationAC}−${m.safetyMargin}＝${r.max}、③＝${r.max}−${r.min}＝${r.width} dB。プラトー幅が負になるため、有効なマスキング量が存在しない。十分に遮蔽しようとすると必ずオーバーマスキングになり、正確な骨導閾値が得られない。これがマスキングジレンマである。（検算：プラトー幅 ＝ ${dilemmaThresholdAbg(m)} − ${abg} ＝ ${plateauWidthFromAbg(abg, m)}）`;
+    const r = boneConductionPlateau({ bcTestEar, masking: m });
+    return `検耳骨導 ${bcTestEar} dB のとき、非検耳への負荷量は ${bcTestEar}＋${m.safetyMargin}＝${r.min} dB。ABG が ${abg} dB でもこの量は変わらない。②＝${bcTestEar}＋${m.interauralAttenuationAC}−${m.safetyMargin}＝${r.max}、③＝${r.width} dB（IA − 2×安全域＝${plateauWidthFromAbg(abg, m)}）。`;
   }
   return null;
 }
@@ -118,10 +112,20 @@ export function renderTeacher(c) {
     F.push(h3(`${s.id}　${s.title}`));
     if (s.showAirMaskingCheck) {
       F.push(p([run('Q4-1　', { bold: true }), run('EDU の正答照合で確認。5 dB 以内の一致を許容範囲とする。')]));
-      const ac = c.representativeThresholds.ac[m.testEar]['1000'];
-      const bc = c.representativeThresholds.bc[m.nonTestEar]['1000'];
-      F.push(p([run('Q4-2　気導の交差聴取：', { bold: true }), run(`検耳の気導閾値（約 ${ac} dB）− 非検耳の骨導閾値（約 ${bc} dB）＝ ${ac - bc} dB。IA の ${m.interauralAttenuationAC} dB に達しないため、両耳とも気導マスキングは不要。`)]));
-      F.push(p([run('採点の要点：', { bold: true }), run('結論よりも根拠を見る。「左右差が小さいから不要」または上記の差の計算が書けていれば正答。「伝音難聴だから不要」は誤った一般化なので減点する。')]));
+      const ia = m.interauralAttenuationAC;
+      const ears = ['right', 'left'];
+      const airLines = ears.map((ear) => {
+        const other = ear === 'right' ? 'left' : 'right';
+        const ac = c.representativeThresholds.ac[ear]['1000'];
+        const bc = c.representativeThresholds.bc[other]['1000'];
+        const diff = ac - bc;
+        const need = diff >= ia;
+        const bcTest = c.representativeThresholds.bc[ear]['1000'];
+        const load = bcTest + m.safetyMargin;
+        return `${EAR_JA[ear]}検耳：気導 ${ac} − 反対耳骨導 ${bc} ＝ ${diff} dB（IA ${ia}）→ ${need ? '要' : '不要'}。要のときの負荷量は検耳骨導 ${bcTest}＋安全域 ${m.safetyMargin}＝${load} dB を反対耳へ。`;
+      });
+      F.push(p([run('Q4-2　気導の交差聴取（1 kHz）：', { bold: true }), run(airLines.join(' '))]));
+      F.push(p([run('採点の要点：', { bold: true }), run('結論よりも差の計算を見る。「伝音難聴だから不要」は誤った一般化なので減点する。負荷量を非検耳の気導＋安全域で書いた答案は減点し、検耳骨導＋安全域に直させる。')]));
     }
     if (s.showBoneMaskingCalc) F.push(...renderMaskingAnswer(c));
     for (const q of s.questions || []) F.push(...renderQuestionAnswer(q, c));

@@ -13,11 +13,11 @@ export const FORMULA_TEXT = {
   airCrossCheck:
     '判定式：　検耳の気導閾値　−　非検耳の骨導閾値　≧　IA（{{ia}} dB）　→　マスキング必要',
   boneMin:
-    '①　最小有効マスキング量　＝　非検耳の気導閾値　＋　安全域（{{safety}} dB）',
+    '①　マスキング負荷量（非検耳へ）　＝　検耳の骨導閾値　＋　安全域（{{safety}} dB）',
   boneMax:
     '②　最大マスキング量（オーバーマスキング開始）　＝　検耳の骨導閾値　＋　IA（{{ia}} dB）　−　安全域（{{safety}} dB）',
   plateau:
-    '③　プラトー幅　＝　②　−　①',
+    '③　プラトー幅　＝　②　−　①　＝　IA　−　2×安全域',
 };
 
 export function formula(key, masking) {
@@ -36,27 +36,24 @@ export function airConductionCrossCheck({ acTestEar, bcNonTestEar, masking }) {
 }
 
 /**
- * 骨導マスキングのプラトー計算。
+ * 骨導マスキング。非検耳への負荷量は検耳骨導＋安全域。
  * @returns {{ min:number, max:number, width:number, plateauObtainable:boolean }}
  */
-export function boneConductionPlateau({ acNonTestEar, bcTestEar, masking }) {
+export function boneConductionPlateau({ bcTestEar, masking }) {
   const ia = masking.interauralAttenuationAC;
   const safety = masking.safetyMargin;
-  const min = acNonTestEar + safety;
+  const min = bcTestEar + safety;
   const max = bcTestEar + ia - safety;
   const width = max - min;
   return { min, max, width, plateauObtainable: width > 0 };
 }
 
 /**
- * 両耳対称を仮定したときのプラトー幅の一般形。
- *   プラトー幅 ＝ IA − ABG − 2×安全域
- * 本課題の設定（IA 50 / 安全域 10）では「30 − ABG」となり、ABG が 30 dB に達すると
- * プラトーが消える。レベル2（耳硬化症・耳小骨連鎖離断）の伏線。
- * この式は教員用にのみ出力し、学生シートには印刷しない。
+ * 負荷量を検耳骨導＋安全域としたときのプラトー幅。ABG には依存しない。
+ *   プラトー幅 ＝ IA − 2×安全域
  */
-export function plateauWidthFromAbg(abg, masking) {
-  return masking.interauralAttenuationAC - abg - 2 * masking.safetyMargin;
+export function plateauWidthFromAbg(_abg, masking) {
+  return masking.interauralAttenuationAC - 2 * masking.safetyMargin;
 }
 
 export function dilemmaThresholdAbg(masking) {
@@ -69,18 +66,21 @@ export function maskingAnswerTable(caseDef) {
   const test = m.testEar;
   const nonTest = m.nonTestEar;
   const ac = caseDef.representativeThresholds.ac[nonTest];
-  const bc = caseDef.representativeThresholds.bc[test];
+  const bcTest = caseDef.representativeThresholds.bc[test];
+  const bcNonTest = caseDef.representativeThresholds.bc[nonTest];
 
   return m.frequencies.map((f) => {
     const key = String(f);
     const acNonTestEar = ac[key];
-    const bcTestEar = bc[key];
-    const r = boneConductionPlateau({ acNonTestEar, bcTestEar, masking: m });
+    const bcTestEar = bcTest[key];
+    const bcNonTestEar = bcNonTest[key];
+    const r = boneConductionPlateau({ bcTestEar, masking: m });
     return {
       frequency: f,
       label: f >= 1000 ? `${f / 1000} kHz` : `${f} Hz`,
       acNonTestEar,
       bcTestEar,
+      bcNonTestEar,
       ...r,
     };
   });

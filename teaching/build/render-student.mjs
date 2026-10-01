@@ -73,6 +73,7 @@ function renderBoneMaskingCalc(m) {
   const out = [];
   out.push(h3(`Q4-3　骨導：マスキング量を計算してください。（検耳＝${earJa[m.testEar]}、非検耳＝${earJa[m.nonTestEar]}）`, { keepNext: true }));
   out.push(box([formula('boneMin', m), formula('boneMax', m), formula('plateau', m)], FILL.info));
+  out.push(p('①の量を非検耳に負荷する。'));
 
   const cols = m.frequencies.map(freqLabel);
   const labelW = 3400;
@@ -81,9 +82,8 @@ function renderBoneMaskingCalc(m) {
   const blank = cols.map(() => '');
   out.push(table(widths, [
     ['項目', ...cols],
-    [`非検耳（${earJa[m.nonTestEar]}）の気導閾値`, ...blank],
     [`検耳（${earJa[m.testEar]}）の骨導閾値`, ...blank],
-    ['①　最小有効マスキング量', ...blank],
+    ['①　マスキング負荷量（非検耳へ）', ...blank],
     ['②　最大マスキング量', ...blank],
     ['③　プラトー幅', ...blank],
     ['④　プラトーは取れるか（○／×）', ...blank],

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { downloadCanvasJpeg } from './downloadCanvasJpeg';
 
-// シンプルなティンパノグラム曲線（Type A想定）を描画し、gif.js を使ってGIF化
-// 仕様（デフォルト）: 800x600, 縦: 0-2.0 mL, 横: -200〜+200 daPa, 5秒, 20fps
+// ティンパノグラム曲線を描画し、完成図を JPEG で保存する
+// 仕様（デフォルト）: 800x600, 縦: 0-2.0 mL, 横: -200〜+200 daPa
 
 export default function TympanogramGif({
   width = 800,
@@ -12,13 +13,11 @@ export default function TympanogramGif({
   yMax = 2.0,
   tympanogramData = null,
   durationMs = 5000,
-  fps = 20,
   gridColor = '#e5e7eb',
   axisColor = '#9ca3af',
   bgColor = '#ffffff'
 }) {
   const canvasRef = useRef(null);
-  const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const animationRef = useRef(null);
@@ -268,59 +267,17 @@ export default function TympanogramGif({
     };
   }, []);
 
-  async function exportGif() {
+  function exportJpeg() {
     try {
-      setBusy(true);
-      setStatus('GIF生成を開始します…');
-
-      const frames = Math.max(1, Math.round((durationMs / 1000) * fps));
-      const delay = Math.round(1000 / fps); // ms/frame
       const c = canvasRef.current;
-      const ctx = c.getContext('2d');
-
-      // eslint-disable-next-line no-undef
-      const gif = new window.GIF({
-        workers: 2,
-        quality: 10,
-        workerScript: '/gif.worker.js',
-        width,
-        height,
-        repeat: 0
-      });
-
-      for (let i = 0; i < frames; i++) {
-        const prog = i / (frames - 1);
-        drawFrame(ctx, prog);
-        gif.addFrame(c, { copy: true, delay });
-        if (i % Math.max(1, Math.floor(frames / 10)) === 0) {
-          setStatus(`フレーム生成中… ${i + 1}/${frames}`);
-        }
-      }
-
-      setStatus('エンコード中…');
-      await new Promise((resolve, reject) => {
-        gif.on('finished', (blob) => {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'tympanogram.gif';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          resolve();
-        });
-        gif.on('abort', () => reject(new Error('GIF encode aborted')));
-        gif.render();
-      });
-
-      setStatus('完了');
+      if (!c) return;
+      drawFrame(c.getContext('2d'), 1);
+      downloadCanvasJpeg(c, 'tympanogram.jpg');
+      setStatus('JPEGを保存しました');
     } catch (e) {
       console.error(e);
       setStatus('エラーが発生しました');
-      alert('GIF生成でエラーが発生しました。ネットワーク接続をご確認ください。');
     } finally {
-      setBusy(false);
       setTimeout(() => setStatus(''), 1500);
     }
   }
@@ -328,21 +285,21 @@ export default function TympanogramGif({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="text-lg font-semibold">Tympanogram GIF（-200〜+200 daPa / 0〜2.0 mL）</div>
+        <div className="text-lg font-semibold">ティンパノグラム（-200〜+200 daPa / 0〜2.0 mL）</div>
         <div className="flex gap-2">
           <button
             onClick={playAnimation}
-            disabled={isPlaying || busy}
-            className={`px-3 py-2 rounded-xl text-white text-sm ${isPlaying || busy ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'}`}
+            disabled={isPlaying}
+            className={`px-3 py-2 rounded-xl text-white text-sm ${isPlaying ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'}`}
           >
             {isPlaying ? '再生中…' : '🔴 ティンパノ実施'}
           </button>
           <button
-            onClick={exportGif}
-            disabled={busy || isPlaying}
-            className={`px-3 py-2 rounded-xl text-white text-sm ${busy || isPlaying ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+            onClick={exportJpeg}
+            disabled={isPlaying}
+            className={`px-3 py-2 rounded-xl text-white text-sm ${isPlaying ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
-            {busy ? '生成中…' : 'GIFダウンロード'}
+            JPEGダウンロード
           </button>
         </div>
       </div>

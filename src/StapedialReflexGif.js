@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { downloadCanvasJpeg } from './downloadCanvasJpeg';
 
 export default function StapedialReflexGif({
   width = 800,
   height = 900,
   durationMs = 17000,
-  fps = 20,
   hearingConfig = null  // propsで受け取るART設定
 }) {
   const canvasRef = useRef(null);
-  const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const animationRef = useRef(null);
@@ -371,59 +370,17 @@ export default function StapedialReflexGif({
     };
   }, []);
 
-  const exportGif = async () => {
+  const exportJpeg = () => {
     try {
-      setBusy(true);
-      setStatus('GIF生成を開始します…');
-
-      const frames = Math.max(1, Math.round((durationMs / 1000) * fps));
-      const delay = Math.round(1000 / fps);
       const c = canvasRef.current;
-      const ctx = c.getContext('2d');
-
-      // eslint-disable-next-line no-undef
-      const gif = new window.GIF({
-        workers: 2,
-        quality: 10,
-        workerScript: '/gif.worker.js',
-        width,
-        height,
-        repeat: 0
-      });
-
-      for (let i = 0; i < frames; i++) {
-        const prog = i / (frames - 1);
-        drawFrame(ctx, prog);
-        gif.addFrame(c, { copy: true, delay });
-        if (i % Math.max(1, Math.floor(frames / 10)) === 0) {
-          setStatus(`フレーム生成中… ${i + 1}/${frames}`);
-        }
-      }
-
-      setStatus('エンコード中…');
-      await new Promise((resolve, reject) => {
-        gif.on('finished', (blob) => {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'stapedial_reflex.gif';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          resolve();
-        });
-        gif.on('abort', () => reject(new Error('GIF encode aborted')));
-        gif.render();
-      });
-
-      setStatus('完了');
+      if (!c) return;
+      drawFrame(c.getContext('2d'), 1);
+      downloadCanvasJpeg(c, 'stapedial_reflex.jpg');
+      setStatus('JPEGを保存しました');
     } catch (e) {
       console.error(e);
       setStatus('エラーが発生しました');
-      alert('GIF生成でエラーが発生しました。ネットワーク接続をご確認ください。');
     } finally {
-      setBusy(false);
       setTimeout(() => setStatus(''), 1500);
     }
   };
@@ -435,17 +392,17 @@ export default function StapedialReflexGif({
         <div className="flex gap-2">
           <button
             onClick={playAnimation}
-            disabled={isPlaying || busy}
-            className={`px-3 py-2 rounded-xl text-white text-sm ${isPlaying || busy ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'}`}
+            disabled={isPlaying}
+            className={`px-3 py-2 rounded-xl text-white text-sm ${isPlaying ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'}`}
           >
             {isPlaying ? '再生中…' : '🔴 反射検査実施'}
           </button>
           <button
-            onClick={exportGif}
-            disabled={busy || isPlaying}
-            className={`px-3 py-2 rounded-xl text-white text-sm ${busy || isPlaying ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+            onClick={exportJpeg}
+            disabled={isPlaying}
+            className={`px-3 py-2 rounded-xl text-white text-sm ${isPlaying ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
-            {busy ? '生成中…' : 'GIFダウンロード'}
+            JPEGダウンロード
           </button>
         </div>
       </div>

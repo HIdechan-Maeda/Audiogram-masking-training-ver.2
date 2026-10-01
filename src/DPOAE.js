@@ -1,7 +1,8 @@
 import { DPOAE_F2_KHZ } from './engine/dpoaeConstants';
 import React, { useEffect, useRef, useState } from 'react';
+import { downloadCanvasJpeg } from './downloadCanvasJpeg';
 
-// DPOAE DP-gramグラフコンポーネント（GIF生成対応）
+// DPOAE DP-gramグラフコンポーネント（完成図を JPEG で保存）
 // 仕様: X軸=f2周波数（kHz、0-8kHz）、Y軸=DPOAEレベル（dB SPL、0-30dB）
 // 左右の耳を表示（右：赤、左：青）
 // 1kHzから順番に測定していくアニメーション
@@ -16,12 +17,10 @@ export default function DPOAE({
   dpoaeData = null,  // { left: [周波数ごとのDPOAEレベル配列], right: [周波数ごとのDPOAEレベル配列] }
   noiseFloor = true,  // ノイズフロアを表示するか
   bgColor = '#ffffff',
-  durationMs = 10000,  // アニメーション時間（ミリ秒）
-  fps = 20  // フレームレート
+  durationMs = 10000  // アニメーション時間（ミリ秒）
 }) {
   const canvasRefRight = useRef(null);
   const canvasRefLeft = useRef(null);
-  const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [animationComplete, setAnimationComplete] = useState(false);
@@ -524,80 +523,31 @@ export default function DPOAE({
     };
   }, []);
 
-  async function exportGif() {
+  function exportJpeg() {
     try {
-      setBusy(true);
-      setStatus('GIF生成を開始します…');
-
-      const frames = Math.max(1, Math.round((durationMs / 1000) * fps));
-      const delay = Math.round(1000 / fps); // ms/frame
       const canvasRight = canvasRefRight.current;
       const canvasLeft = canvasRefLeft.current;
-      
-      if (!canvasRight || !canvasLeft) {
-        throw new Error('Canvas not found');
-      }
+      if (!canvasRight || !canvasLeft) return;
 
-      // 結合キャンバスを作成（左右を並べる）
-      const combinedWidth = width;
-      const combinedHeight = height;
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = combinedWidth;
-      tempCanvas.height = combinedHeight;
-      const tempCtx = tempCanvas.getContext('2d');
+      drawFrame(canvasRight.getContext('2d'), 'right', chartWidth, 1);
+      drawFrame(canvasLeft.getContext('2d'), 'left', chartWidth, 1);
+      setMeasuredCount(frequencies.length);
+      setAnimationComplete(true);
 
-      // eslint-disable-next-line no-undef
-      const gif = new window.GIF({
-        workers: 2,
-        quality: 10,
-        workerScript: '/gif.worker.js',
-        width: combinedWidth,
-        height: combinedHeight,
-        repeat: 0
-      });
-
-      for (let i = 0; i < frames; i++) {
-        const prog = i / (frames - 1);
-        // 各キャンバスに描画
-        drawFrame(canvasRight.getContext('2d'), 'right', chartWidth, prog);
-        drawFrame(canvasLeft.getContext('2d'), 'left', chartWidth, prog);
-        
-        // 結合キャンバスに左右を描画
-        tempCtx.fillStyle = bgColor;
-        tempCtx.fillRect(0, 0, combinedWidth, combinedHeight);
-        tempCtx.drawImage(canvasRight, 0, 0);
-        tempCtx.drawImage(canvasLeft, chartWidth, 0);
-        
-        gif.addFrame(tempCanvas, { copy: true, delay });
-        if (i % Math.max(1, Math.floor(frames / 10)) === 0) {
-          setStatus(`フレーム生成中… ${i + 1}/${frames}`);
-        }
-      }
-
-      setStatus('エンコード中…');
-      await new Promise((resolve, reject) => {
-        gif.on('finished', (blob) => {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'dpoae.gif';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          resolve();
-        });
-        gif.on('abort', () => reject(new Error('GIF encode aborted')));
-        gif.render();
-      });
-
-      setStatus('完了');
+      const combined = document.createElement('canvas');
+      combined.width = width;
+      combined.height = height;
+      const ctx = combined.getContext('2d');
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(canvasRight, 0, 0);
+      ctx.drawImage(canvasLeft, chartWidth, 0);
+      downloadCanvasJpeg(combined, 'dpoae.jpg');
+      setStatus('JPEGを保存しました');
     } catch (e) {
       console.error(e);
       setStatus('エラーが発生しました');
-      alert('GIF生成でエラーが発生しました。ネットワーク接続をご確認ください。');
     } finally {
-      setBusy(false);
       setTimeout(() => setStatus(''), 1500);
     }
   }
@@ -679,14 +629,14 @@ export default function DPOAE({
           )}
           <button
             onClick={playAnimation}
-            disabled={isPlaying || busy}
+            disabled={isPlaying}
             style={{
               padding: '8px 16px',
               borderRadius: '6px',
               border: 'none',
-              backgroundColor: isPlaying || busy ? '#d1d5db' : '#3b82f6',
+              backgroundColor: isPlaying ? '#d1d5db' : '#3b82f6',
               color: 'white',
-              cursor: isPlaying || busy ? 'not-allowed' : 'pointer',
+              cursor: isPlaying ? 'not-allowed' : 'pointer',
               fontSize: '14px',
               fontWeight: '500'
             }}
@@ -694,20 +644,20 @@ export default function DPOAE({
             {isPlaying ? '実施中...' : 'DPOAE実施'}
           </button>
           <button
-            onClick={exportGif}
-            disabled={busy}
+            onClick={exportJpeg}
+            disabled={isPlaying}
             style={{
               padding: '8px 16px',
               borderRadius: '6px',
               border: 'none',
-              backgroundColor: busy ? '#d1d5db' : '#10b981',
+              backgroundColor: isPlaying ? '#d1d5db' : '#10b981',
               color: 'white',
-              cursor: busy ? 'not-allowed' : 'pointer',
+              cursor: isPlaying ? 'not-allowed' : 'pointer',
               fontSize: '14px',
               fontWeight: '500'
             }}
           >
-            {busy ? '生成中...' : 'GIFダウンロード'}
+            JPEGダウンロード
           </button>
         </div>
       </div>
