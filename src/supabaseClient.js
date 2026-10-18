@@ -34,6 +34,17 @@ export const supabase = DISABLE_SUPABASE
           data: { user: { id: `local_${Date.now()}` } },
           error: null,
         }),
+        getSession: async () => ({ data: { session: null }, error: null }),
+        signInWithPassword: async () => ({
+          data: { session: null, user: null },
+          error: { message: 'Supabaseが無効です' },
+        }),
+        signUp: async () => ({
+          data: { session: null, user: null },
+          error: { message: 'Supabaseが無効です' },
+        }),
+        resend: async () => ({ error: { message: 'Supabaseが無効です' } }),
+        signOut: async () => ({ error: null }),
       },
       from: () => ({
         select: () => createMockQueryChain(),

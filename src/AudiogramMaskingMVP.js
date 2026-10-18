@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } from "react";
 import { supabase, isSupabaseDisabled } from './supabaseClient';
+import { normalizeSignupEmail } from './eduEmailAuth';
+import { getApprovalStatus, requestApproval } from './eduApprovals';
 import {
   logStudentUsageEvent,
   buildDefaultPresetProgressSnapshot,
@@ -546,18 +548,15 @@ function LegendMark({ shape, color }) {
   );
 }
 export default function AudiogramMaskingMVP() {
-  // 学生IDログイン管理
+  // メール登録後に利用する（聴覚の鬼と同じ流れ）
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [studentId, setStudentId] = useState('');
-  const [currentStudentId, setCurrentStudentId] = useState(() => {
-    // sessionStorageから学生IDを復元
-    try {
-      const saved = sessionStorage.getItem('audioscope_edu_student_id');
-      return saved || null;
-    } catch (e) {
-      return null;
-    }
-  });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
+  const [authInfo, setAuthInfo] = useState('');
+  const [isResending, setIsResending] = useState(false);
+  const [currentStudentId, setCurrentStudentId] = useState(null);
   const [isLoadingLogin, setIsLoadingLogin] = useState(false);
 
   // 起動時: .env の REACT_APP_OPENAI_API_KEY が読めているか確認（デバッグ用）
@@ -566,16 +565,41 @@ export default function AudiogramMaskingMVP() {
     console.log('[Audioscope EDU] 起動時チェック: REACT_APP_OPENAI_API_KEY =', key ? `設定済み(${key.length}文字)` : '未読み込み（.env の場所・再起動・キャッシュを確認）');
   }, []);
 
-  // sessionStorageから学生IDを復元して自動ログイン
+  // 確認済みのメールセッションがあれば、そのまま使える
   useEffect(() => {
-    const savedStudentId = sessionStorage.getItem('audioscope_edu_student_id');
-    if (savedStudentId && !isAuthenticated) {
-      // 自動ログイン処理
-      setStudentId(savedStudentId);
-      setCurrentStudentId(savedStudentId);
-      setIsAuthenticated(true);
-    }
-  }, [isAuthenticated]); // isAuthenticatedが変更された時のみ実行
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session;
+        const sessionEmail = normalizeSignupEmail(session?.user?.email || '');
+        if (cancelled || !sessionEmail || !session?.user?.id) return;
+        let approval = await getApprovalStatus(sessionEmail);
+        if (!approval) approval = await requestApproval(sessionEmail);
+        if (cancelled) return;
+        if (approval !== 'approved') {
+          await supabase.auth.signOut();
+          setAuthMessage('担当者の承認待ちです。承認後に、もう一度ログインしてください。');
+          return;
+        }
+        setEmail(sessionEmail);
+        setStudentId(sessionEmail);
+        setCurrentStudentId(sessionEmail);
+        setUserId(session.user.id);
+        setIsAuthenticated(true);
+        try {
+          sessionStorage.setItem('audioscope_edu_student_id', sessionEmail);
+        } catch (e) {
+          console.warn('sessionStorageへの保存に失敗:', e);
+        }
+      } catch (e) {
+        console.warn('セッション復元に失敗:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ログイン状態がtrueになった時に進捗データを読み込む
   useEffect(() => {
@@ -741,120 +765,189 @@ export default function AudiogramMaskingMVP() {
     }
   }, [currentStudentId]);
 
-  // 学生IDでログインする関数
-  const handleStudentLogin = async () => {
-    if (!studentId.trim()) {
-      alert('学生IDを入力してください');
-      return;
-    }
-    
-    setIsLoadingLogin(true);
-    try {
-      // 学生IDを正規化（空白削除、大文字変換）
-      const normalizedStudentId = studentId.trim().toUpperCase();
-      
-      // 匿名認証でSupabaseにサインイン（テーブルがなくてもログインできるように）
-      let authData = null;
-      let userId = null;
-      
+  const openEduForEmail = async (normalizedEmail, authUserId) => {
+      setUserId(authUserId);
+      setCurrentStudentId(normalizedEmail);
+      setStudentId(normalizedEmail);
+      setIsAuthenticated(true);
       try {
-        const { data: authResult, error: authError } = await supabase.auth.signInAnonymously();
-        if (authError) {
-          console.warn('匿名認証エラー（テーブル未作成の可能性）:', authError);
-          // 認証に失敗してもローカルでログインできるようにする
-          userId = `local_${normalizedStudentId}_${Date.now()}`;
-        } else {
-          authData = authResult;
-          userId = authResult?.user?.id || `local_${normalizedStudentId}_${Date.now()}`;
-        }
-      } catch (authErr) {
-        console.warn('認証処理エラー:', authErr);
-        userId = `local_${normalizedStudentId}_${Date.now()}`;
+        sessionStorage.setItem('audioscope_edu_student_id', normalizedEmail);
+      } catch (e) {
+        console.warn('sessionStorageへの保存に失敗:', e);
       }
-      
-      setUserId(userId);
-      
-      // 学生情報をSupabaseに保存または取得（テーブルが存在する場合のみ）
+
       try {
         const { data: existingStudent, error: fetchError } = await supabase
           .from('students')
           .select('*')
-          .eq('student_id', normalizedStudentId)
+          .eq('student_id', normalizedEmail)
           .single();
-        
+
         if (fetchError && fetchError.code !== 'PGRST116') {
-          // PGRST116は「見つからない」エラー（正常）
-          // その他のエラーはテーブルが存在しない可能性
           if (fetchError.code === '42P01' || fetchError.message?.includes('does not exist')) {
             console.warn('studentsテーブルが存在しません。ローカルモードで続行します。');
           } else {
-            console.error('学生情報の取得エラー:', fetchError);
+            console.error('利用者情報の取得エラー:', fetchError);
           }
         }
-        
-        // 学生が存在しない場合は新規作成（テーブルが存在する場合のみ）
-        if (!existingStudent && authData?.user?.id) {
+
+        if (!existingStudent && authUserId) {
           const { error: insertError } = await supabase
             .from('students')
             .insert({
-              student_id: normalizedStudentId,
-              user_id: authData.user.id,
+              student_id: normalizedEmail,
+              user_id: authUserId,
               created_at: new Date().toISOString()
             });
-          
-          if (insertError) {
-            if (insertError.code === '42P01' || insertError.message?.includes('does not exist')) {
-              console.warn('studentsテーブルが存在しません。ローカルモードで続行します。');
-            } else {
-              console.error('学生情報の保存エラー:', insertError);
-            }
+          if (insertError && insertError.code !== '42P01' && !insertError.message?.includes('does not exist')) {
+            console.error('利用者情報の保存エラー:', insertError);
           }
-        } else if (existingStudent && authData?.user?.id) {
-          // 既存の学生のuser_idを更新（匿名認証のIDを紐付け）
+        } else if (existingStudent && authUserId) {
           const { error: updateError } = await supabase
             .from('students')
-            .update({ user_id: authData.user.id })
-            .eq('student_id', normalizedStudentId);
-          
-          if (updateError) {
-            console.error('学生情報の更新エラー:', updateError);
-          }
+            .update({ user_id: authUserId })
+            .eq('student_id', normalizedEmail);
+          if (updateError) console.error('利用者情報の更新エラー:', updateError);
         }
       } catch (dbError) {
         console.warn('データベース操作エラー（テーブル未作成の可能性）:', dbError);
-        // テーブルが存在しない場合でもログインを続行
-      }
-      
-      // ログイン成功（テーブルがなくてもローカルで動作）
-      setCurrentStudentId(normalizedStudentId);
-      setIsAuthenticated(true);
-      
-      // sessionStorageに学生IDを保存（ティンパノグラムビューアから戻った時に自動ログインするため）
-      try {
-        sessionStorage.setItem('audioscope_edu_student_id', normalizedStudentId);
-      } catch (e) {
-        console.warn('sessionStorageへの保存に失敗:', e);
-      }
-      
-      // 学生IDに紐づく進捗データを読み込む（テーブルが存在する場合のみ）
-      try {
-        await loadStudentProgress(normalizedStudentId);
-      } catch (progressError) {
-        console.warn('進捗データの読み込みエラー（テーブル未作成の可能性）:', progressError);
-        // 進捗データの読み込みに失敗してもログインは続行
       }
 
-      await logStudentUsageEvent(normalizedStudentId, userId, USAGE_EVENT.LOGIN, {});
-      await reloadUsageHistory(normalizedStudentId);
+      try {
+        await loadStudentProgress(normalizedEmail);
+      } catch (progressError) {
+        console.warn('進捗データの読み込みエラー:', progressError);
+      }
+      await logStudentUsageEvent(normalizedEmail, authUserId, USAGE_EVENT.LOGIN, {});
+      await reloadUsageHistory(normalizedEmail);
+  };
+
+  const handleEmailLogin = async () => {
+    setAuthMessage('');
+    setAuthInfo('');
+    const normalizedEmail = normalizeSignupEmail(email);
+    if (!normalizedEmail || !normalizedEmail.includes('@')) {
+      setAuthMessage('メールアドレスを入力してください。');
+      return;
+    }
+    if (!password) {
+      setAuthMessage('パスワードを入力してください。');
+      return;
+    }
+    setIsLoadingLogin(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+      if (error) {
+        const raw = error.message || '';
+        if (/confirm/i.test(raw) || /not confirmed/i.test(raw)) {
+          setAuthMessage('確認メールのリンクを開いてから、ログインしてください。');
+        } else {
+          setAuthMessage('ログインできませんでした。メールアドレスとパスワード、本登録が済んでいるかを確認してください。');
+        }
+        return;
+      }
+      const authUserId = data?.user?.id || data?.session?.user?.id;
+      if (!authUserId) {
+        setAuthMessage('ログインできませんでした。');
+        return;
+      }
+      let approval = await getApprovalStatus(normalizedEmail);
+      if (!approval) approval = await requestApproval(normalizedEmail);
+      if (approval !== 'approved') {
+        await supabase.auth.signOut();
+        setAuthMessage(approval === 'rejected'
+          ? 'このメールは承認されていません。担当者に確認してください。'
+          : '担当者の承認待ちです。承認後に、もう一度ログインしてください。');
+        return;
+      }
+      await openEduForEmail(normalizedEmail, authUserId);
     } catch (error) {
       console.error('ログインエラー:', error);
-      alert(`ログインに失敗しました: ${error.message || '不明なエラー'}\n\nブラウザのコンソールで詳細を確認してください。`);
+      setAuthMessage(error?.message || 'ログインに失敗しました。通信環境を確認してください。');
     } finally {
       setIsLoadingLogin(false);
     }
   };
-  
-  // 学生IDに紐づく進捗データを読み込む
+
+  const handleEmailSignUp = async () => {
+    setAuthMessage('');
+    setAuthInfo('');
+    const normalizedEmail = normalizeSignupEmail(email);
+    if (!normalizedEmail || !normalizedEmail.includes('@')) {
+      setAuthMessage('メールアドレスを入力してください。');
+      return;
+    }
+    if (!password || password.length < 6) {
+      setAuthMessage('パスワードは6文字以上にしてください。');
+      return;
+    }
+    setIsLoadingLogin(true);
+    try {
+      const origin = window.location.origin;
+      const { data, error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: { emailRedirectTo: `${origin}/` },
+      });
+      if (error) {
+        const raw = error.message || '';
+        if (/already/i.test(raw) || /registered/i.test(raw)) {
+          setAuthMessage('このメールは登録済みです。ログインするか、確認メールの再送を使ってください。');
+        } else {
+          setAuthMessage(`新規登録に失敗しました: ${raw}`);
+        }
+        return;
+      }
+      const approval = await requestApproval(normalizedEmail);
+      if (approval === 'approved' && data?.session?.user?.id) {
+        await openEduForEmail(normalizedEmail, data.session.user.id);
+        return;
+      }
+      if (data?.session) {
+        await supabase.auth.signOut();
+      }
+      if (approval === 'approved') {
+        setAuthInfo('このメールは承認済みです。確認メールのリンクを開いてから、ログインしてください。');
+        return;
+      }
+      setAuthInfo('登録を受け付けました。確認メールのリンクを開き、担当者の承認後にログインしてください。');
+    } catch (error) {
+      console.error('新規登録エラー:', error);
+      setAuthMessage(error?.message || '新規登録に失敗しました。通信環境を確認してください。');
+    } finally {
+      setIsLoadingLogin(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    setAuthMessage('');
+    setAuthInfo('');
+    const normalizedEmail = normalizeSignupEmail(email);
+    if (!normalizedEmail || !normalizedEmail.includes('@')) {
+      setAuthMessage('メールアドレスを入力してください。');
+      return;
+    }
+    setIsResending(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: normalizedEmail,
+        options: { emailRedirectTo: `${window.location.origin}/` },
+      });
+      if (error) {
+        setAuthMessage('確認メールを再送できませんでした。しばらくしてから再度お試しください。');
+        return;
+      }
+      setAuthInfo('確認メールを再送しました。受信トレイと迷惑メールを確認してください。');
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  // メールアドレスに紐づく進捗データを読み込む
   const loadStudentProgress = async (sid) => {
     try {
       // 初回ロードフラグをリセット（Supabaseから読み込むため）
@@ -4365,39 +4458,68 @@ ${targets.map((target, index) => {
     }
   }
 
-  // 学生IDログイン画面
   if (!isAuthenticated) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center bg-gray-50">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full mx-4">
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Audioscope EDU - オーディオグラム演習</h1>
-            <p className="text-gray-600">学生IDを入力してログインしてください</p>
+            <p className="text-gray-600">メールアドレスで新規登録し、担当者の承認後にログインしてください。</p>
+            <p className="text-xs text-gray-500 mt-2">確認メールのリンクを開いても、承認があるまで演習は始まりません。</p>
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">学生ID</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">メールアドレス</label>
               <input
-                type="text"
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && !isLoadingLogin && handleStudentLogin()}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="例: 2024001"
+                placeholder="name@example.com"
                 disabled={isLoadingLogin}
+                autoComplete="email"
               />
-              <p className="mt-1 text-xs text-gray-500">※ 学生IDは成績管理に使用されます</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">パスワード</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !isLoadingLogin && handleEmailLogin()}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="6文字以上"
+                disabled={isLoadingLogin}
+                autoComplete="current-password"
+              />
             </div>
             <button
-              onClick={handleStudentLogin}
-              disabled={!studentId.trim() || isLoadingLogin}
+              onClick={handleEmailLogin}
+              disabled={isLoadingLogin}
               className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
-              {isLoadingLogin ? 'ログイン中...' : 'ログイン'}
+              {isLoadingLogin ? '処理中...' : 'ログイン'}
+            </button>
+            <button
+              onClick={handleEmailSignUp}
+              disabled={isLoadingLogin}
+              className="w-full bg-white text-blue-700 py-2 px-4 rounded-lg border border-blue-600 hover:bg-blue-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+            >
+              新規登録
+            </button>
+            <button
+              type="button"
+              onClick={handleResendConfirmation}
+              disabled={isResending || isLoadingLogin}
+              className="w-full text-sm text-blue-700 underline disabled:text-gray-400"
+            >
+              {isResending ? '送信中...' : '確認メールを再送する'}
             </button>
           </div>
+          {authInfo && <p className="mt-4 text-sm text-green-700 whitespace-pre-wrap">{authInfo}</p>}
+          {authMessage && <p className="mt-4 text-sm text-red-700 whitespace-pre-wrap">{authMessage}</p>}
           <div className="mt-6 text-center text-sm text-gray-500">
-            学生IDでログインすると、進捗状況が自動的に保存されます
+            学内・学外どちらのメールでも登録できます。確認メールのあと、担当者が承認するとログインできます。
           </div>
           <div className="mt-6 pt-4 border-t border-gray-200 text-center">
             <p className="text-xs text-gray-500 mb-2">講師・スタッフの方</p>
@@ -4419,7 +4541,7 @@ ${targets.map((target, index) => {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold">Audioscope EDU</h1>
             <p className="text-sm text-gray-600 mt-1">
-              学生ID: <span className="font-semibold text-blue-600">{currentStudentId}</span> - 進捗状況は自動保存されます
+              登録メール: <span className="font-semibold text-blue-600">{currentStudentId}</span> - 進捗状況は自動保存されます
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -4469,12 +4591,13 @@ ${targets.map((target, index) => {
             <button
               onClick={() => {
                 if (window.confirm('ログアウトしますか？進捗状況は保存されています。')) {
+                  supabase.auth.signOut().catch((e) => console.warn('ログアウトエラー:', e));
                   setIsAuthenticated(false);
                   setCurrentStudentId(null);
                   setStudentId('');
+                  setUserId(null);
                   setUsageHistory([]);
                   lastDefaultProgressLogRef.current = '';
-                  // sessionStorageからも削除
                   try {
                     sessionStorage.removeItem('audioscope_edu_student_id');
                   } catch (e) {

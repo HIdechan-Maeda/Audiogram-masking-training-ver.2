@@ -10,6 +10,8 @@ import {
   averageAccuracyForPresets,
 } from './usageEvents';
 import InstructorCaseGenerator from './InstructorCaseGenerator';
+import { listApprovals, setApprovalStatus } from './eduApprovals';
+import { normalizeSignupEmail } from './eduEmailAuth';
 
 export default function InstructorDashboard({ instructor, onLogout }) {
   const [mainTab, setMainTab] = useState('generate');
@@ -31,6 +33,10 @@ export default function InstructorDashboard({ instructor, onLogout }) {
   const [usageEventsLoading, setUsageEventsLoading] = useState(false);
   const [usageSearch, setUsageSearch] = useState('');
   const [usageTypeFilter, setUsageTypeFilter] = useState('all');
+  const [approvals, setApprovals] = useState([]);
+  const [approvalEmail, setApprovalEmail] = useState('');
+  const [approvalMessage, setApprovalMessage] = useState('');
+  const [approvalLoading, setApprovalLoading] = useState(false);
 
   /** 学生・進捗のみ（手動更新時に取得。使用履歴は含めない） */
   const loadStudentsData = useCallback(async () => {
@@ -254,6 +260,44 @@ export default function InstructorDashboard({ instructor, onLogout }) {
     setSelectedStudent(student);
   };
 
+  const loadApprovals = useCallback(async () => {
+    setApprovalLoading(true);
+    setApprovalMessage('');
+    try {
+      setApprovals(await listApprovals());
+    } catch (error) {
+      console.error('承認一覧の取得エラー:', error);
+      setApprovalMessage(error?.message || '承認一覧を読み込めませんでした。');
+    } finally {
+      setApprovalLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadApprovals();
+  }, [loadApprovals]);
+
+  const changeApproval = async (email, status) => {
+    setApprovalMessage('');
+    try {
+      await setApprovalStatus(email, status);
+      await loadApprovals();
+    } catch (error) {
+      console.error('承認の更新エラー:', error);
+      setApprovalMessage(error?.message || '承認を更新できませんでした。');
+    }
+  };
+
+  const approveTypedEmail = async () => {
+    const normalized = normalizeSignupEmail(approvalEmail);
+    if (!normalized || !normalized.includes('@')) {
+      setApprovalMessage('メールアドレスを入力してください。');
+      return;
+    }
+    await changeApproval(normalized, 'approved');
+    setApprovalEmail('');
+  };
+
   // 進捗リセット
   const resetStudentProgress = async (studentId) => {
     if (!window.confirm(`学生ID: ${studentId} の進捗をリセットしますか？この操作は取り消せません。`)) {
@@ -305,6 +349,75 @@ export default function InstructorDashboard({ instructor, onLogout }) {
             </div>
           </div>
         </header>
+
+        <section className="bg-white rounded-2xl shadow p-6 mb-6">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">登録の承認</h2>
+              <p className="text-sm text-gray-600 mt-1">承認したメールだけが、ログインして演習を始められます。</p>
+            </div>
+            <button
+              type="button"
+              onClick={loadApprovals}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              disabled={approvalLoading}
+            >
+              {approvalLoading ? '読み込み中...' : '一覧を更新'}
+            </button>
+          </div>
+          <div className="flex gap-2 mb-4">
+            <input
+              type="email"
+              value={approvalEmail}
+              onChange={(e) => setApprovalEmail(e.target.value)}
+              placeholder="先に承認するメールアドレス"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
+            />
+            <button
+              type="button"
+              onClick={approveTypedEmail}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              承認する
+            </button>
+          </div>
+          {approvalMessage && <p className="text-sm text-red-600 mb-3">{approvalMessage}</p>}
+          {approvals.length === 0 && !approvalMessage ? (
+            <p className="text-sm text-gray-500">まだ登録申請はありません。</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b">
+                    <th className="py-2 pr-3">メール</th>
+                    <th className="py-2 pr-3">状態</th>
+                    <th className="py-2">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {approvals.map((row) => (
+                    <tr key={row.email} className="border-b border-gray-100">
+                      <td className="py-2 pr-3">{row.email}</td>
+                      <td className="py-2 pr-3">
+                        {row.status === 'approved' ? '承認済み' : row.status === 'rejected' ? '見送り' : '承認待ち'}
+                      </td>
+                      <td className="py-2">
+                        <div className="flex gap-2">
+                          {row.status !== 'approved' && (
+                            <button type="button" onClick={() => changeApproval(row.email, 'approved')} className="px-3 py-1 bg-blue-600 text-white rounded-lg">承認</button>
+                          )}
+                          {row.status !== 'rejected' && (
+                            <button type="button" onClick={() => changeApproval(row.email, 'rejected')} className="px-3 py-1 bg-gray-200 text-gray-700 rounded-lg">見送る</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <div className="grid grid-cols-2 gap-2 mb-6 bg-white rounded-2xl shadow p-2">
           <button
