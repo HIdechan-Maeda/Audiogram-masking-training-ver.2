@@ -334,6 +334,15 @@ export default function InstructorDashboard({ instructor, onLogout }) {
             </div>
             <div className="flex items-center gap-4">
               <button
+                type="button"
+                onClick={() => {
+                  window.location.href = '/?staff=1';
+                }}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+              >
+                学生用画面へ
+              </button>
+              <button
                 onClick={loadAllData}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 disabled={isLoading || usageEventsLoading}

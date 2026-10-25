@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } from "react";
 import { supabase, isSupabaseDisabled } from './supabaseClient';
-import { normalizeSignupEmail } from './eduEmailAuth';
+import { normalizeSignupEmail, readStaffInstructor, staffStudentId } from './eduEmailAuth';
 import { getApprovalStatus, requestApproval } from './eduApprovals';
 import {
   logStudentUsageEvent,
@@ -548,15 +548,16 @@ function LegendMark({ shape, color }) {
   );
 }
 export default function AudiogramMaskingMVP() {
-  // メール登録後に利用する（聴覚の鬼と同じ流れ）
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [studentId, setStudentId] = useState('');
+  const staffInstructor = readStaffInstructor();
+  // メール登録後に利用する（聴覚の鬼と同じ流れ）。講師画面からの確認は承認を待たない。
+  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(staffInstructor));
+  const [studentId, setStudentId] = useState(staffInstructor ? staffStudentId(staffInstructor) : '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authMessage, setAuthMessage] = useState('');
   const [authInfo, setAuthInfo] = useState('');
   const [isResending, setIsResending] = useState(false);
-  const [currentStudentId, setCurrentStudentId] = useState(null);
+  const [currentStudentId, setCurrentStudentId] = useState(staffInstructor ? staffStudentId(staffInstructor) : null);
   const [isLoadingLogin, setIsLoadingLogin] = useState(false);
 
   // 起動時: .env の REACT_APP_OPENAI_API_KEY が読めているか確認（デバッグ用）
@@ -569,6 +570,7 @@ export default function AudiogramMaskingMVP() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (readStaffInstructor()) return;
       try {
         const { data } = await supabase.auth.getSession();
         const session = data?.session;
@@ -4541,7 +4543,9 @@ ${targets.map((target, index) => {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold">Audioscope EDU</h1>
             <p className="text-sm text-gray-600 mt-1">
-              登録メール: <span className="font-semibold text-blue-600">{currentStudentId}</span> - 進捗状況は自動保存されます
+              {staffInstructor
+                ? <>講師確認: <span className="font-semibold text-blue-600">{staffInstructor.name || staffInstructor.instructorId}</span>。学生の承認とは別です。</>
+                : <>登録メール: <span className="font-semibold text-blue-600">{currentStudentId}</span> - 進捗状況は自動保存されます</>}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -4590,6 +4594,10 @@ ${targets.map((target, index) => {
             </button>
             <button
               onClick={() => {
+                if (staffInstructor) {
+                  window.location.href = '/?mode=instructor';
+                  return;
+                }
                 if (window.confirm('ログアウトしますか？進捗状況は保存されています。')) {
                   supabase.auth.signOut().catch((e) => console.warn('ログアウトエラー:', e));
                   setIsAuthenticated(false);
@@ -4607,7 +4615,7 @@ ${targets.map((target, index) => {
               }}
               className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
             >
-              ログアウト
+              {staffInstructor ? '講師画面に戻る' : 'ログアウト'}
             </button>
           </div>
         </header>
